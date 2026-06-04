@@ -44,11 +44,13 @@ def list_documents(
     entityId: str | None = None,
     repo: DocumentRepository = Depends(get_repository),
 ) -> list[dict[str, Any]]:
-    items = repo.list(TABLE)
+    match: dict[str, Any] = {}
     if entityType:
-        items = [d for d in items if d.get("entityType") == entityType]
+        match["entityType"] = entityType
     if entityId:
-        items = [d for d in items if d.get("entityId") == entityId]
+        match["entityId"] = entityId
+    # Indexed JSONB containment (GIN) instead of loading the whole table.
+    items = repo.find(TABLE, match) if match else repo.list(TABLE)
     return sorted(items, key=lambda d: d.get("uploadedAt", ""), reverse=True)
 
 

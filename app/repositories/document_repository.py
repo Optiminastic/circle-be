@@ -35,14 +35,49 @@ class SqlAlchemyDocumentRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def list(self, table: str) -> list[Document]:
+    def list(self, table: str, *, limit: int | None = None, offset: int = 0) -> list[Document]:
         try:
-            rows = self._session.execute(
-                text(f'SELECT data FROM "{table}" ORDER BY created_at ASC')
-            ).fetchall()
+            sql = f'SELECT data FROM "{table}" ORDER BY created_at ASC'
+            params: dict[str, Any] = {}
+            if limit is not None:
+                sql += " LIMIT :limit OFFSET :offset"
+                params = {"limit": limit, "offset": max(0, offset)}
+            rows = self._session.execute(text(sql), params).fetchall()
             return [_as_dict(row[0]) for row in rows]
         except SQLAlchemyError as exc:
             raise RepositoryError(f"Failed to list '{table}'") from exc
+
+    def find(
+        self, table: str, match: Document, *, limit: int | None = None, offset: int = 0
+    ) -> list[Document]:
+        """Filtered list via indexed JSONB containment (uses the GIN index)."""
+        try:
+            sql = (
+                f'SELECT data FROM "{table}" WHERE data @> CAST(:match AS JSONB) '
+                "ORDER BY created_at ASC"
+            )
+            params: dict[str, Any] = {"match": json.dumps(match)}
+            if limit is not None:
+                sql += " LIMIT :limit OFFSET :offset"
+                params["limit"] = limit
+                params["offset"] = max(0, offset)
+            rows = self._session.execute(text(sql), params).fetchall()
+            return [_as_dict(row[0]) for row in rows]
+        except SQLAlchemyError as exc:
+            raise RepositoryError(f"Failed to query '{table}'") from exc
+
+    def count(self, table: str, match: Document | None = None) -> int:
+        try:
+            if match:
+                row = self._session.execute(
+                    text(f'SELECT count(*) FROM "{table}" WHERE data @> CAST(:match AS JSONB)'),
+                    {"match": json.dumps(match)},
+                ).fetchone()
+            else:
+                row = self._session.execute(text(f'SELECT count(*) FROM "{table}"')).fetchone()
+            return int(row[0]) if row else 0
+        except SQLAlchemyError as exc:
+            raise RepositoryError(f"Failed to count '{table}'") from exc
 
     def get(self, table: str, item_id: str) -> Document | None:
         try:

@@ -29,6 +29,15 @@ CREATE TABLE IF NOT EXISTS "{table}" (
 )
 """
 
+# Indexes that keep reads cheap as tables grow:
+#  - created_at: the default list ordering (avoids a full sort).
+#  - GIN(jsonb_path_ops): indexed JSONB containment (`data @> '{...}'`) so
+#    filtered lookups (e.g. documents by entityId) don't scan every row.
+_INDEX_DDL = (
+    'CREATE INDEX IF NOT EXISTS "ix_{table}_created_at" ON "{table}" (created_at)',
+    'CREATE INDEX IF NOT EXISTS "ix_{table}_data_gin" ON "{table}" USING GIN (data jsonb_path_ops)',
+)
+
 
 class Database:
     def __init__(self, settings: Settings) -> None:
@@ -87,6 +96,8 @@ class Database:
             with self._engine.begin() as conn:
                 for table in tables:
                     conn.execute(text(_TABLE_DDL.format(table=table)))
-            logger.info("Ensured %d resource tables exist.", len(tables))
+                    for index_ddl in _INDEX_DDL:
+                        conn.execute(text(index_ddl.format(table=table)))
+            logger.info("Ensured %d resource tables (with indexes) exist.", len(tables))
         except SQLAlchemyError as exc:
             logger.exception("Failed to ensure tables: %s", exc)

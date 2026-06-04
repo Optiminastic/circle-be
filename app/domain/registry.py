@@ -19,6 +19,9 @@ class ResourceDef:
 
 
 _DEFS: tuple[ResourceDef, ...] = (
+    ResourceDef("auth-users", "auth_users", "id"),
+    ResourceDef("schedules", "schedules", "id"),
+    ResourceDef("jobs", "jobs", "id"),
     ResourceDef("candidates", "candidates", "id"),
     ResourceDef("interviews", "interviews", "id"),
     ResourceDef("iq-tests", "iq_tests", "id"),

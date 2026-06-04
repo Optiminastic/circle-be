@@ -21,8 +21,15 @@ Document = dict[str, Any]
 
 
 @router.get("/{resource}")
-def list_all(resource: str, service: ResourceService = Depends(get_resource_service)) -> list[Document]:
-    return service.list(get_resource(resource))
+def list_all(
+    resource: str,
+    limit: int | None = None,
+    offset: int = 0,
+    service: ResourceService = Depends(get_resource_service),
+) -> list[Document]:
+    # Pagination is opt-in: without `limit` the full list is returned (unchanged
+    # behavior); pass `?limit=50&offset=100` to page through large resources.
+    return service.list(get_resource(resource), limit=limit, offset=offset)
 
 
 @router.get("/{resource}/{item_id}")
