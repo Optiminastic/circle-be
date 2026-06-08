@@ -57,6 +57,17 @@ class Settings(BaseSettings):
     office_address: str = "Optiminastic Office (set OFFICE_ADDRESS in .env)"
     office_maps_url: str = "https://maps.google.com/?q=Optiminastic"
 
+    # Google Calendar (single shared HR account, one-way push). The OAuth client
+    # id/secret come from a Google Cloud "Web application" credential; the shared
+    # account's refresh token is obtained via the in-app connect flow and stored
+    # in the DB (never in env). See app/services/google_calendar.py.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/calendar/oauth/callback"
+    google_calendar_id: str = "primary"  # which calendar events are written to
+    # Where the OAuth callback redirects the browser back to (the Settings page).
+    frontend_url: str = "http://localhost:3001"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_csv(cls, value: object) -> object:
@@ -87,6 +98,10 @@ class Settings(BaseSettings):
     @property
     def has_smtp(self) -> bool:
         return bool(self.smtp_user and self.smtp_password)
+
+    @property
+    def has_google(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
 
 
 @lru_cache

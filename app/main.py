@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api.routes import documents, meta, notifications, resources
+from app.api.routes import calendar, documents, meta, notifications, resources
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
@@ -73,6 +73,7 @@ def create_app() -> FastAPI:
     # so their literal paths win over "/api/{resource}".
     app.include_router(documents.router)
     app.include_router(notifications.router)
+    app.include_router(calendar.router)
     app.include_router(resources.router)
     return app
 

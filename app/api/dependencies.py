@@ -11,10 +11,12 @@ from collections.abc import Iterator
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.core.errors import StorageError
 from app.db.database import Database
 from app.repositories.base import DocumentRepository
 from app.repositories.document_repository import SqlAlchemyDocumentRepository
+from app.services.google_calendar import GoogleCalendarService
 from app.services.resource_service import ResourceService
 from app.storage.base import FileStorage
 
@@ -44,3 +46,9 @@ def get_repository(session: Session = Depends(get_session)) -> DocumentRepositor
 
 def get_resource_service(repo: DocumentRepository = Depends(get_repository)) -> ResourceService:
     return ResourceService(repo)
+
+
+def get_google_calendar_service(
+    settings: Settings = Depends(get_settings),
+) -> GoogleCalendarService:
+    return GoogleCalendarService(settings)

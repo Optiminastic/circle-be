@@ -34,6 +34,9 @@ _DEFS: tuple[ResourceDef, ...] = (
     ResourceDef("email-templates", "email_templates", "id"),
     ResourceDef("sent-emails", "sent_emails", "id"),
     ResourceDef("offboarding", "offboarding", "employeeId"),
+    # Google Calendar: single shared-account OAuth row + per-event id mapping.
+    ResourceDef("google-oauth", "google_oauth", "id"),
+    ResourceDef("calendar-links", "calendar_links", "id"),
 )
 
 RESOURCES: dict[str, ResourceDef] = {d.slug: d for d in _DEFS}
