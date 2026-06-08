@@ -23,6 +23,7 @@ _DEFS: tuple[ResourceDef, ...] = (
     ResourceDef("schedules", "schedules", "id"),
     ResourceDef("jobs", "jobs", "id"),
     ResourceDef("candidates", "candidates", "id"),
+    ResourceDef("test-invites", "test_invites", "id"),
     ResourceDef("interviews", "interviews", "id"),
     ResourceDef("iq-tests", "iq_tests", "id"),
     ResourceDef("assignments", "assignments", "id"),

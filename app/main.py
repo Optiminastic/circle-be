@@ -11,8 +11,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api.routes import documents, meta, resources
+from app.api.routes import documents, meta, notifications, resources
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
@@ -55,6 +56,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Compress large list payloads — JSONB resource lists shrink ~5-10x.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -65,9 +69,10 @@ def create_app() -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(meta.router)
-    # Documents router must precede the generic resources router so its literal
-    # "/api/documents" paths win over "/api/{resource}".
+    # Documents/notifications routers must precede the generic resources router
+    # so their literal paths win over "/api/{resource}".
     app.include_router(documents.router)
+    app.include_router(notifications.router)
     app.include_router(resources.router)
     return app
 

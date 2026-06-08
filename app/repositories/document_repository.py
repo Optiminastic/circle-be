@@ -9,11 +9,13 @@ callers never see raw driver exceptions (error tolerance).
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
+
+T = TypeVar("T")
 
 from app.core.errors import RepositoryError
 from app.core.logging import get_logger
@@ -35,6 +37,19 @@ class SqlAlchemyDocumentRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def _run(self, op: Callable[[], T]) -> T:
+        """Execute, retrying once on a stale pooled connection.
+
+        With pool_pre_ping disabled (latency), a connection killed by the
+        server/network surfaces as OperationalError on first use. SQLAlchemy
+        invalidates the dead connection, so a single retry gets a fresh one.
+        """
+        try:
+            return op()
+        except OperationalError:
+            self._session.rollback()
+            return op()
+
     def list(self, table: str, *, limit: int | None = None, offset: int = 0) -> list[Document]:
         try:
             sql = f'SELECT data FROM "{table}" ORDER BY created_at ASC'
@@ -42,7 +57,7 @@ class SqlAlchemyDocumentRepository:
             if limit is not None:
                 sql += " LIMIT :limit OFFSET :offset"
                 params = {"limit": limit, "offset": max(0, offset)}
-            rows = self._session.execute(text(sql), params).fetchall()
+            rows = self._run(lambda: self._session.execute(text(sql), params).fetchall())
             return [_as_dict(row[0]) for row in rows]
         except SQLAlchemyError as exc:
             raise RepositoryError(f"Failed to list '{table}'") from exc
@@ -61,7 +76,7 @@ class SqlAlchemyDocumentRepository:
                 sql += " LIMIT :limit OFFSET :offset"
                 params["limit"] = limit
                 params["offset"] = max(0, offset)
-            rows = self._session.execute(text(sql), params).fetchall()
+            rows = self._run(lambda: self._session.execute(text(sql), params).fetchall())
             return [_as_dict(row[0]) for row in rows]
         except SQLAlchemyError as exc:
             raise RepositoryError(f"Failed to query '{table}'") from exc
@@ -69,33 +84,41 @@ class SqlAlchemyDocumentRepository:
     def count(self, table: str, match: Document | None = None) -> int:
         try:
             if match:
-                row = self._session.execute(
-                    text(f'SELECT count(*) FROM "{table}" WHERE data @> CAST(:match AS JSONB)'),
-                    {"match": json.dumps(match)},
-                ).fetchone()
+                row = self._run(
+                    lambda: self._session.execute(
+                        text(f'SELECT count(*) FROM "{table}" WHERE data @> CAST(:match AS JSONB)'),
+                        {"match": json.dumps(match)},
+                    ).fetchone()
+                )
             else:
-                row = self._session.execute(text(f'SELECT count(*) FROM "{table}"')).fetchone()
+                row = self._run(
+                    lambda: self._session.execute(text(f'SELECT count(*) FROM "{table}"')).fetchone()
+                )
             return int(row[0]) if row else 0
         except SQLAlchemyError as exc:
             raise RepositoryError(f"Failed to count '{table}'") from exc
 
     def get(self, table: str, item_id: str) -> Document | None:
         try:
-            row = self._session.execute(
-                text(f'SELECT data FROM "{table}" WHERE id = :id'), {"id": item_id}
-            ).fetchone()
+            row = self._run(
+                lambda: self._session.execute(
+                    text(f'SELECT data FROM "{table}" WHERE id = :id'), {"id": item_id}
+                ).fetchone()
+            )
             return _as_dict(row[0]) if row else None
         except SQLAlchemyError as exc:
             raise RepositoryError(f"Failed to read '{table}/{item_id}'") from exc
 
     def upsert(self, table: str, item_id: str, data: Document) -> Document:
         try:
-            self._session.execute(
-                text(
-                    f'INSERT INTO "{table}" (id, data) VALUES (:id, CAST(:data AS JSONB)) '
-                    "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()"
-                ),
-                {"id": item_id, "data": json.dumps(data)},
+            self._run(
+                lambda: self._session.execute(
+                    text(
+                        f'INSERT INTO "{table}" (id, data) VALUES (:id, CAST(:data AS JSONB)) '
+                        "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()"
+                    ),
+                    {"id": item_id, "data": json.dumps(data)},
+                )
             )
             self._session.commit()
             return data
@@ -105,8 +128,10 @@ class SqlAlchemyDocumentRepository:
 
     def delete(self, table: str, item_id: str) -> bool:
         try:
-            result = self._session.execute(
-                text(f'DELETE FROM "{table}" WHERE id = :id'), {"id": item_id}
+            result = self._run(
+                lambda: self._session.execute(
+                    text(f'DELETE FROM "{table}" WHERE id = :id'), {"id": item_id}
+                )
             )
             self._session.commit()
             return result.rowcount > 0

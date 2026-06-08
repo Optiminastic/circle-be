@@ -50,12 +50,29 @@ class Database:
             logger.warning("DATABASE_URL is not set — the API will start but data endpoints return 503.")
             return
         try:
+            # Latency tuning for a remote (e.g. Neon) database where every round
+            # trip costs real wall-clock time:
+            #  - AUTOCOMMIT: every repository operation is a single statement, so
+            #    skipping the implicit BEGIN + COMMIT/ROLLBACK saves 2 RTTs/request.
+            #  - pool_recycle instead of pool_pre_ping: pre_ping costs a SELECT 1
+            #    RTT on every checkout; recycling connections before the server's
+            #    idle timeout achieves the same safety for free.
+            #  - TCP keepalives keep pooled connections alive through NAT/idle.
             self._engine = create_engine(
                 self._settings.sqlalchemy_url,
-                pool_pre_ping=True,
+                isolation_level="AUTOCOMMIT",
+                pool_pre_ping=False,
+                pool_recycle=self._settings.db_pool_recycle,
                 pool_size=self._settings.db_pool_size,
                 max_overflow=self._settings.db_max_overflow,
                 pool_timeout=self._settings.db_pool_timeout,
+                connect_args={
+                    "connect_timeout": 10,
+                    "keepalives": 1,
+                    "keepalives_idle": 30,
+                    "keepalives_interval": 10,
+                    "keepalives_count": 3,
+                },
                 future=True,
             )
             self._session_factory = sessionmaker(bind=self._engine, expire_on_commit=False, future=True)
