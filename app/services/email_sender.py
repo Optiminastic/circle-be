@@ -167,7 +167,7 @@ _BTN_STYLE = (
 _RULES_HTML = """
   <ul style="margin:10px 0 0;padding-left:18px;font-size:12.5px;color:#555;line-height:1.7;">
     <li>The test runs in <strong>full screen, in a single tab</strong>.</li>
-    <li>Switching tabs or leaving the window is flagged — <strong>3 violations auto-submit your test</strong>.</li>
+    <li>Switching tabs or leaving the window is flagged — <strong>3 violations disqualify your test (no score)</strong>.</li>
     <li>The timer keeps running even if you refresh the page.</li>
     <li>Make sure you have a stable internet connection before starting.</li>
   </ul>
@@ -182,9 +182,12 @@ def test_email_subject(template: str, position: str | None = None) -> str:
         "assessment_invite": "Your Curcle assessment — secure test link inside",
         "assessment_passed": "You've cleared the assessment — interview is next",
         "assessment_failed": "Update on your application at Curcle",
+        "assignment_invite": "Your Curcle assignment — submit your work",
     }
+    if template == "assignment_invite" and position:
+        return f"Your {position} assignment at Curcle — submit your work"
     if template == "iq_passed" and position:
-        return f"You've cleared the IQ round — your {position} assessment is ready"
+        return f"You've cleared the IQ round — your {position} assignment is ready"
     return subjects.get(template, "Update from the Curcle HR Team")
 
 
@@ -204,6 +207,21 @@ def _test_email_body_html(
     pos = html.escape(position or "the role you applied for")
     url = html.escape(test_url or "#", quote=True)
     dur = duration_min or 60
+
+    if template == "assignment_invite":
+        return f"""
+          <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
+          <p style="margin:0 0 18px;font-size:13.5px;color:#444;line-height:1.55;">
+            As the next step for <strong>{pos}</strong>, here&apos;s your
+            <strong>take-home assignment</strong>. Open the link below to read the brief, complete
+            the task, and upload your work before the deadline.
+          </p>
+          <a href="{url}" style="{_BTN_STYLE}">Open Assignment</a>
+          <p style="margin:18px 0 0;font-size:12.5px;color:#555;line-height:1.6;">
+            There&apos;s no timer — take your time and submit your best work. If you have any
+            questions about the brief, just reply to this email.
+          </p>
+        """
 
     if template in ("iq_invite", "assessment_invite"):
         when_block = (
@@ -240,22 +258,33 @@ def _test_email_body_html(
             with a score of <strong>{html.escape(score or '')}</strong>! 🎉
           </p>
           <p style="margin:0 0 18px;font-size:13.5px;color:#444;line-height:1.55;">
-            Your next step is the <strong>{pos} assessment</strong> — a role-specific online test
-            with a <strong>{dur}-minute</strong> time limit. The same rules apply.
+            Your next step is a <strong>take-home {pos} assignment</strong>. Open the link below to
+            read the brief, complete the task, and upload your work before the deadline.
           </p>
-          <a href="{url}" style="{_BTN_STYLE}">Start Assessment</a>
-          {_RULES_HTML}
+          <a href="{url}" style="{_BTN_STYLE}">Open Assignment</a>
+          <p style="margin:18px 0 0;font-size:12.5px;color:#555;line-height:1.6;">
+            Take your time and submit your best work — there&apos;s no timer. If you have any
+            questions about the brief, just reply to this email.
+          </p>
         """
 
     if template == "iq_failed":
+        outcome = (
+            f"Unfortunately your score of <strong>{html.escape(score)}</strong> did not meet the "
+            "qualifying bar for this round, and we won't be moving forward at this time."
+            if score
+            else (
+                "Unfortunately we are unable to move forward with your application at this time, "
+                "as the test could not be accepted."
+            )
+        )
         return f"""
           <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
           <p style="margin:0 0 12px;font-size:13.5px;color:#444;line-height:1.55;">
             Thank you for taking the time to complete our IQ test for <strong>{pos}</strong>.
           </p>
           <p style="margin:0 0 12px;font-size:13.5px;color:#444;line-height:1.55;">
-            Unfortunately your score of <strong>{html.escape(score or '')}</strong> did not meet the
-            qualifying bar for this round, and we won't be moving forward at this time.
+            {outcome}
           </p>
           <p style="margin:0;font-size:13.5px;color:#444;line-height:1.55;">
             We genuinely appreciate your interest and encourage you to apply again in the future.
@@ -283,14 +312,22 @@ def _test_email_body_html(
         """
 
     # assessment_failed (default fallback)
+    outcome = (
+        f"Unfortunately your score of <strong>{html.escape(score)}</strong> did not meet the "
+        "qualifying bar, and we won't be moving forward at this time."
+        if score
+        else (
+            "Unfortunately we are unable to move forward with your application at this time, "
+            "as the assessment could not be accepted."
+        )
+    )
     return f"""
       <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
       <p style="margin:0 0 12px;font-size:13.5px;color:#444;line-height:1.55;">
         Thank you for completing the <strong>{pos}</strong> assessment.
       </p>
       <p style="margin:0 0 12px;font-size:13.5px;color:#444;line-height:1.55;">
-        Unfortunately your score of <strong>{html.escape(score or '')}</strong> did not meet the
-        qualifying bar, and we won't be moving forward at this time.
+        {outcome}
       </p>
       <p style="margin:0;font-size:13.5px;color:#444;line-height:1.55;">
         We genuinely appreciate the effort you put in and encourage you to apply again in the future.
@@ -362,7 +399,7 @@ def send_test_email(
 
         msg = EmailMessage()
         msg["Subject"] = test_email_subject(template, position)
-        msg["From"] = f"{settings.smtp_from_name} <{settings.smtp_user}>"
+        msg["From"] = f"{settings.smtp_from_name} <{settings.from_address}>"
         msg["To"] = to
         msg.set_content(text_fallback)
         msg.add_alternative(_wrap_branded(inner), subtype="html")
@@ -389,7 +426,7 @@ def send_schedule_email(
         when_ist = _format_ist(date_time_iso)
         msg = EmailMessage()
         msg["Subject"] = subject_for(schedule_type)
-        msg["From"] = f"{settings.smtp_from_name} <{settings.smtp_user}>"
+        msg["From"] = f"{settings.smtp_from_name} <{settings.from_address}>"
         msg["To"] = to
         msg.set_content(
             _build_text(

@@ -46,11 +46,14 @@ class Settings(BaseSettings):
     b2_bucket: str = ""
     max_upload_mb: int = 15
 
-    # Gmail SMTP (app password) for candidate notification emails.
+    # SMTP for candidate notification emails. Works with Gmail (user = the full
+    # address, also the From) or providers like SendGrid (user = "apikey",
+    # password = the API key, and a distinct verified SMTP_FROM_EMAIL sender).
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
-    smtp_user: str = ""  # full gmail address (also the From address)
-    smtp_password: str = ""  # 16-char app password
+    smtp_user: str = ""  # login username (Gmail address, or literally "apikey")
+    smtp_password: str = ""  # Gmail app password, or the provider API key
+    smtp_from_email: str = ""  # verified sender; falls back to smtp_user (Gmail)
     smtp_from_name: str = "Curcle HR Team"
 
     # Office location for offline rounds (IQ Test / Assessment / Interview).
@@ -98,6 +101,12 @@ class Settings(BaseSettings):
     @property
     def has_smtp(self) -> bool:
         return bool(self.smtp_user and self.smtp_password)
+
+    @property
+    def from_address(self) -> str:
+        """The envelope From email. Defaults to smtp_user for Gmail, where the
+        login address is also the sender; SendGrid needs a verified sender."""
+        return self.smtp_from_email or self.smtp_user
 
     @property
     def has_google(self) -> bool:
