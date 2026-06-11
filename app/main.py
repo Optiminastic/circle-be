@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api.routes import calendar, documents, meta, notifications, resources
+from app.api.routes import calendar, doc_requests, documents, meta, notifications, resources
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
@@ -62,6 +62,15 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        # Also allow localhost and any private-LAN origin (any port), so the app
+        # works when opened from a phone/other device on the same network. The
+        # matched origin is echoed back (never "*"), so allow_credentials is safe.
+        allow_origin_regex=(
+            r"https?://(localhost|127\.0\.0\.1|"
+            r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+            r"192\.168\.\d{1,3}\.\d{1,3}|"
+            r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?"
+        ),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -72,6 +81,7 @@ def create_app() -> FastAPI:
     # Documents/notifications routers must precede the generic resources router
     # so their literal paths win over "/api/{resource}".
     app.include_router(documents.router)
+    app.include_router(doc_requests.router)
     app.include_router(notifications.router)
     app.include_router(calendar.router)
     app.include_router(resources.router)

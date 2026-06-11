@@ -183,8 +183,19 @@ def test_email_subject(template: str, position: str | None = None) -> str:
         "assessment_passed": "You've cleared the assessment — interview is next",
         "assessment_failed": "Update on your application at Optiminastic × Circle",
         "assignment_invite": "Your Optiminastic × Circle assignment — submit your work",
+        "doc_request": "Action needed — upload your onboarding documents (link valid 24 hours)",
+        "offer_shortlisted": "Great news — you've been shortlisted at Optiminastic × Circle ✨",
         "offer_selected": "Congratulations — you're selected at Optiminastic × Circle 🎉",
+        "offer_letter": "Your offer letter from Optiminastic × Circle — please review & sign",
+        "office_invite": "You're invited to our office — Optiminastic × Circle",
+        "appointment_letter": "Your letter of appointment — Optiminastic × Circle",
     }
+    if template == "offer_letter" and position:
+        return f"Your offer letter for {position} at Optiminastic × Circle — please review & sign"
+    if template == "appointment_letter" and position:
+        return f"Letter of appointment — {position} at Optiminastic × Circle"
+    if template == "offer_shortlisted" and position:
+        return f"You're shortlisted for {position} at Optiminastic × Circle — confirm your availability"
     if template == "offer_selected" and position:
         return f"You're selected for {position} at Optiminastic × Circle — confirm your availability"
     if template == "assignment_invite" and position:
@@ -210,6 +221,115 @@ def _test_email_body_html(
     pos = html.escape(position or "the role you applied for")
     url = html.escape(test_url or "#", quote=True)
     dur = duration_min or 60
+
+    if template == "offer_letter":
+        return f"""
+          <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
+          <p style="margin:0 0 14px;font-size:13.5px;color:#444;line-height:1.55;">
+            Please find your <strong>offer letter for the {pos} role</strong> at Optiminastic × Circle.
+            We&apos;re excited about the prospect of you joining us.
+          </p>
+          <div style="margin:0 0 16px;padding:14px 16px;background:#f0e7d5;border-radius:10px;">
+            <p style="margin:0;font-size:13px;color:#212842;">
+              <strong>Next step:</strong> review the offer, and if everything looks good,
+              <strong>sign it and send the signed copy back</strong> by replying to this email.
+            </p>
+          </div>
+          <p style="margin:0;font-size:13px;color:#444;line-height:1.55;">
+            If you have any questions about the offer, just reply here — we&apos;re happy to help.
+          </p>
+        """
+
+    if template == "office_invite":
+        return f"""
+          <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
+          <p style="margin:0 0 14px;font-size:13.5px;color:#444;line-height:1.55;">
+            Thank you for accepting your offer — welcome to the team! We&apos;d love to have you
+            visit our office to meet everyone and complete a few joining formalities.
+          </p>
+          <div style="margin:0 0 16px;padding:16px;background:#fdf6ec;border:1px solid #e1d6bc;border-radius:10px;">
+            <p style="margin:0 0 6px;font-size:14px;font-weight:bold;color:#212842;">📍 Our office</p>
+            <p style="margin:0 0 12px;font-size:13px;color:#444;">{html.escape(settings.office_address)}</p>
+            <a href="{html.escape(settings.office_maps_url, quote=True)}" style="{_BTN_STYLE}">View on Google Maps</a>
+          </div>
+          <p style="margin:0;font-size:13px;color:#444;line-height:1.55;">
+            Our HR team will confirm the exact day and time with you shortly. We look forward to
+            seeing you!
+          </p>
+        """
+
+    if template == "appointment_letter":
+        return f"""
+          <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
+          <p style="margin:0 0 14px;font-size:13.5px;color:#444;line-height:1.55;">
+            We&apos;re delighted to share your <strong>letter of appointment</strong> for the
+            <strong>{pos} role</strong> at Optiminastic × Circle. This confirms your appointment and
+            the terms discussed during your onboarding.
+          </p>
+          <div style="margin:0 0 16px;padding:14px 16px;background:#f0e7d5;border-radius:10px;">
+            <p style="margin:0;font-size:13px;color:#212842;">
+              Please keep this letter for your records. Our HR team will reach out with your start-date
+              logistics and first-day details.
+            </p>
+          </div>
+          <p style="margin:0;font-size:13px;color:#444;line-height:1.55;">
+            Welcome aboard — we can&apos;t wait to have you with us.
+          </p>
+        """
+
+    if template == "doc_request":
+        return f"""
+          <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
+          <p style="margin:0 0 14px;font-size:13.5px;color:#444;line-height:1.55;">
+            Welcome aboard! To complete your onboarding for <strong>{pos}</strong>, please upload your
+            joining documents through your secure personal link below.
+          </p>
+          <div style="margin:0 0 16px;padding:14px 16px;background:#fdf6ec;border:1px solid #e1d6bc;border-radius:10px;">
+            <p style="margin:0;font-size:13px;font-weight:bold;color:#b91c1c;">
+              ⏳ This link is valid for 24 hours only.
+            </p>
+            <p style="margin:6px 0 0;font-size:12.5px;color:#555;">
+              If it expires before you finish, just let us know and we&apos;ll send a fresh one.
+            </p>
+          </div>
+          <p style="margin:0 0 8px;font-size:12.5px;font-weight:bold;color:#212842;">We&apos;ll need:</p>
+          <ul style="margin:0 0 18px;padding-left:18px;font-size:12.5px;color:#555;line-height:1.7;">
+            <li>Aadhaar card &amp; PAN card</li>
+            <li>Address proof</li>
+            <li>Education &amp; experience documents</li>
+            <li>A passport-size photo</li>
+            <li>Bank details (account number &amp; IFSC) + a cancelled cheque</li>
+          </ul>
+          <a href="{url}" style="{_BTN_STYLE}">Upload my documents</a>
+          <p style="margin:18px 0 0;font-size:12px;color:#555;line-height:1.6;">
+            Please use original, clearly readable files. Your information is stored securely and used
+            only for verification.
+          </p>
+        """
+
+    if template == "offer_shortlisted":
+        return f"""
+          <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
+          <p style="margin:0 0 14px;font-size:13.5px;color:#444;line-height:1.55;">
+            Great news — after your interview, you&apos;ve been
+            <strong style="color:#0a7d4f;">shortlisted for the {pos} role</strong> at
+            Optiminastic × Circle! ✨ The panel was impressed, and you&apos;re among the final
+            candidates being considered.
+          </p>
+          <p style="margin:0 0 16px;font-size:13.5px;color:#444;line-height:1.55;">
+            To help us move quickly on the final step, please <strong>confirm your availability to
+            join</strong> — just reply to this email with your <strong>earliest joining date</strong>
+            and any notice period you need to serve.
+          </p>
+          <div style="margin:0;padding:14px 16px;background:#f0e7d5;border-radius:10px;">
+            <p style="margin:0;font-size:13px;color:#212842;">
+              Reply with: your joining date, current notice period, and any questions you have for us.
+            </p>
+          </div>
+          <p style="margin:16px 0 0;font-size:13px;color:#444;line-height:1.55;">
+            We&apos;ll be in touch shortly with the outcome. Thank you for your patience.
+          </p>
+        """
 
     if template == "offer_selected":
         return f"""
