@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import html
 import smtplib
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
@@ -557,6 +557,170 @@ def send_test_email(
         logger.info("Test email '%s' sent to %s.", template, to)
     except Exception:  # noqa: BLE001 - background task must never propagate
         logger.exception("Failed to send test email '%s' to %s.", template, to)
+
+
+def _wrap_custom(inner: str) -> str:
+    """Branded shell WITHOUT the auto HR-team footer (custom bodies sign off themselves)."""
+    return f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0;padding:0;background:#f0e7d5;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0e7d5;padding:28px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0"
+                 style="max-width:560px;width:100%;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e1d6bc;">
+            <tr>
+              <td style="background:#212842;padding:16px 24px;">
+                <span style="color:#ffffff;font-size:15px;font-weight:bold;letter-spacing:0.4px;">Circle by Optiminastic</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:26px 26px 30px;font-size:13.5px;color:#1a1a1a;line-height:1.6;">
+                {inner}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def _ics_escape(value: str) -> str:
+    """Escape a value for an iCalendar TEXT field (RFC 5545)."""
+    return (
+        value.replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+    )
+
+
+def _ics_dt(value_iso: str) -> str:
+    """A naive/aware ISO timestamp -> UTC 'YYYYMMDDTHHMMSSZ'.
+
+    Naive datetime-local strings (no tz) are treated as IST, matching how the
+    calendar/email layer formats appointment times."""
+    dt = datetime.fromisoformat(value_iso.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_IST)
+    return dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _build_ics(
+    *,
+    uid: str,
+    summary: str,
+    description: str,
+    location: str,
+    start_iso: str,
+    duration_min: int,
+    organizer_email: str,
+    organizer_name: str,
+    attendees: list[str],
+) -> str:
+    """A METHOD:REQUEST VCALENDAR so recipients get a real Google Calendar invite."""
+    start = _ics_dt(start_iso)
+    end_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+    if end_dt.tzinfo is None:
+        end_dt = end_dt.replace(tzinfo=_IST)
+    end = (end_dt + timedelta(minutes=max(duration_min or 45, 1))).astimezone(timezone.utc).strftime(
+        "%Y%m%dT%H%M%SZ"
+    )
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Circle by Optiminastic//Interview//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:REQUEST",
+        "BEGIN:VEVENT",
+        f"UID:{_ics_escape(uid)}",
+        f"DTSTAMP:{stamp}",
+        f"DTSTART:{start}",
+        f"DTEND:{end}",
+        f"SUMMARY:{_ics_escape(summary)}",
+        f"DESCRIPTION:{_ics_escape(description)}",
+        f"LOCATION:{_ics_escape(location)}",
+        f"ORGANIZER;CN={_ics_escape(organizer_name)}:mailto:{organizer_email}",
+    ]
+    for email in attendees:
+        if not email or not email.strip():
+            continue
+        lines.append(
+            "ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:"
+            f"mailto:{email.strip()}"
+        )
+    lines += ["STATUS:CONFIRMED", "SEQUENCE:0", "END:VEVENT", "END:VCALENDAR"]
+    return "\r\n".join(lines) + "\r\n"
+
+
+def send_custom_email(
+    settings: Settings,
+    to: str,
+    subject: str,
+    body: str,
+    cc: list[str] | None = None,
+    *,
+    event_start_iso: str | None = None,
+    event_duration_min: int = 45,
+    event_summary: str | None = None,
+    event_location: str | None = None,
+    event_description: str | None = None,
+    organizer_email: str | None = None,
+    organizer_name: str | None = None,
+    attendees: list[str] | None = None,
+    event_uid: str | None = None,
+) -> None:
+    """Send an HR-composed (and possibly edited) email, wrapped in the branded
+    shell. When event details are supplied, a Google Calendar invite (.ics,
+    METHOD:REQUEST) is attached so the event lands on every attendee's calendar.
+    Logs failures, never raises (runs inside a BackgroundTask)."""
+    try:
+        inner = html.escape(body).replace("\n", "<br/>")
+        recipients = [to] + [c for c in (cc or []) if c.strip()]
+
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = f"{settings.smtp_from_name} <{settings.from_address}>"
+        msg["To"] = to
+        if cc:
+            msg["Cc"] = ", ".join(c.strip() for c in cc if c.strip())
+        msg.set_content(body)
+        msg.add_alternative(_wrap_custom(inner), subtype="html")
+
+        if event_start_iso:
+            ics = _build_ics(
+                uid=event_uid or f"{event_start_iso}-{to}",
+                summary=event_summary or subject,
+                description=event_description or body,
+                location=event_location or "",
+                start_iso=event_start_iso,
+                duration_min=event_duration_min,
+                organizer_email=organizer_email or settings.from_address,
+                organizer_name=organizer_name or settings.smtp_from_name,
+                attendees=attendees or [to],
+            )
+            msg.add_attachment(
+                ics.encode("utf-8"),
+                maintype="text",
+                subtype="calendar",
+                filename="invite.ics",
+                params={"method": "REQUEST", "name": "invite.ics"},
+            )
+
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as smtp:
+            smtp.starttls()
+            smtp.login(settings.smtp_user, settings.smtp_password)
+            smtp.send_message(msg, to_addrs=recipients)
+        logger.info("Custom email sent to %s.", to)
+    except Exception:  # noqa: BLE001 - background task must never propagate
+        logger.exception("Failed to send custom email to %s.", to)
 
 
 def send_schedule_email(

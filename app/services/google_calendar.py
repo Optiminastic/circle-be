@@ -119,11 +119,18 @@ class GoogleCalendarService:
         description: str,
         start_iso: str,
         duration_min: int,
-        attendee_email: str | None,
+        attendee_email: str | None = None,
+        attendees: list[str] | None = None,
+        location: str | None = None,
         google_event_id: str | None = None,
         request_id: str,
     ) -> dict[str, Any]:
-        """Create or patch a calendar event. Returns {id, hangoutLink?}."""
+        """Create or patch a calendar event. Returns {id, hangoutLink?}.
+
+        Attendees (candidate / interviewer / HR) are invited via Google's own
+        invitation email (sendUpdates="all"). Both the legacy single
+        ``attendee_email`` and the ``attendees`` list are accepted and merged.
+        """
         start = self._parse(start_iso)
         end = start + timedelta(minutes=max(duration_min or 30, 1))
         body: dict[str, Any] = {
@@ -132,8 +139,15 @@ class GoogleCalendarService:
             "start": {"dateTime": start.isoformat(), "timeZone": _TIME_ZONE},
             "end": {"dateTime": end.isoformat(), "timeZone": _TIME_ZONE},
         }
+        if location:
+            body["location"] = location
+        # Merge + de-duplicate attendee emails (preserve order, drop blanks).
+        merged = list(attendees or [])
         if attendee_email:
-            body["attendees"] = [{"email": attendee_email}]
+            merged.append(attendee_email)
+        emails = list(dict.fromkeys(e.strip() for e in merged if e and e.strip()))
+        if emails:
+            body["attendees"] = [{"email": e} for e in emails]
         add_meet = event_type in _MEET_TYPES
         if add_meet and not google_event_id:
             body["conferenceData"] = {
