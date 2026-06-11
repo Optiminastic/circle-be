@@ -7,6 +7,7 @@ URLs so the bucket stays private.
 
 from __future__ import annotations
 
+import os
 import re
 import urllib.error
 import urllib.parse
@@ -32,6 +33,19 @@ logger = get_logger("curcle.documents")
 TABLE = "documents"
 
 _SAFE = re.compile(r"[^A-Za-z0-9._-]")
+
+# Extensions browsers can render inline — used to recover a sensible content type
+# when the stored one is missing or a generic octet-stream.
+_PREVIEW_MIME: dict[str, str] = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+    ".txt": "text/plain",
+}
 
 # Google Drive "native" files (Docs/Sheets/Slides) have no binary form and must
 # be exported to a real format; everything else downloads byte-for-byte.
@@ -205,7 +219,44 @@ def get_download_url(
     storage: FileStorage = Depends(get_storage),
 ) -> dict[str, Any]:
     doc = _get_or_404(repo, doc_id)
-    return {"url": storage.presigned_url(doc["storageKey"]), "fileName": doc.get("fileName")}
+    # Serve the file inline so previewable types (PDF, images) open in the browser
+    # tab instead of downloading; non-previewable types still resolve fine.
+    filename = _safe_name(doc.get("fileName") or "file")
+    url = storage.presigned_url(
+        doc["storageKey"],
+        disposition=f'inline; filename="{filename}"',
+        content_type=doc.get("contentType") or None,
+    )
+    return {"url": url, "fileName": doc.get("fileName")}
+
+
+@router.get("/{doc_id}/preview")
+def preview_document(
+    doc_id: str,
+    repo: DocumentRepository = Depends(get_repository),
+    storage: FileStorage = Depends(get_storage),
+) -> Response:
+    """Stream a document inline so it opens in the browser tab (no download).
+
+    Unlike the presigned `/url` route, this proxies the bytes through the API and
+    sets `Content-Disposition: inline` ourselves — reliable regardless of whether
+    the object store honours response-header overrides.
+    """
+    doc = _get_or_404(repo, doc_id)
+    data, stored_type = storage.get(doc["storageKey"])
+    filename = _safe_name(doc.get("fileName") or "file")
+
+    content_type = doc.get("contentType") or stored_type or "application/octet-stream"
+    # Recover a previewable type from the extension if the stored one is generic.
+    if content_type in ("", "application/octet-stream"):
+        ext = os.path.splitext(filename.lower())[1]
+        content_type = _PREVIEW_MIME.get(ext, content_type)
+
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
 
 
 @router.delete("/{doc_id}", status_code=204, response_class=Response)

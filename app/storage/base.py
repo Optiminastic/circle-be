@@ -12,6 +12,15 @@ from typing import Protocol
 class FileStorage(Protocol):
     def put(self, key: str, data: bytes, content_type: str) -> None: ...
 
-    def presigned_url(self, key: str, expires: int = 900) -> str: ...
+    def get(self, key: str) -> tuple[bytes, str]: ...
+
+    def presigned_url(
+        self,
+        key: str,
+        expires: int = 900,
+        *,
+        disposition: str | None = None,
+        content_type: str | None = None,
+    ) -> str: ...
 
     def delete(self, key: str) -> None: ...

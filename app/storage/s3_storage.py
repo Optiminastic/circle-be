@@ -37,11 +37,34 @@ class S3FileStorage:
             logger.exception("put_object failed for %s", key)
             raise StorageError("Failed to store the file") from exc
 
-    def presigned_url(self, key: str, expires: int = 900) -> str:
+    def get(self, key: str) -> tuple[bytes, str]:
+        """Read an object's bytes and stored content type (for inline streaming)."""
         try:
-            return self._client.generate_presigned_url(
-                "get_object", Params={"Bucket": self._bucket, "Key": key}, ExpiresIn=expires
-            )
+            resp = self._client.get_object(Bucket=self._bucket, Key=key)
+            data = resp["Body"].read()
+            content_type = resp.get("ContentType") or "application/octet-stream"
+            return data, content_type
+        except (BotoCoreError, ClientError) as exc:
+            logger.exception("get_object failed for %s", key)
+            raise StorageError("Failed to read the file") from exc
+
+    def presigned_url(
+        self,
+        key: str,
+        expires: int = 900,
+        *,
+        disposition: str | None = None,
+        content_type: str | None = None,
+    ) -> str:
+        # ResponseContentDisposition/Type override the response headers when the
+        # URL is fetched — used to force inline preview instead of a download.
+        params: dict[str, str] = {"Bucket": self._bucket, "Key": key}
+        if disposition:
+            params["ResponseContentDisposition"] = disposition
+        if content_type:
+            params["ResponseContentType"] = content_type
+        try:
+            return self._client.generate_presigned_url("get_object", Params=params, ExpiresIn=expires)
         except (BotoCoreError, ClientError) as exc:
             logger.exception("presign failed for %s", key)
             raise StorageError("Failed to create a download link") from exc
