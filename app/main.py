@@ -52,7 +52,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description="Backend for the Curcle HR Operating System — PostgreSQL source of truth.",
+        description="Backend for the Optiminastic × Circle HR Operating System — PostgreSQL source of truth.",
         lifespan=lifespan,
     )
 

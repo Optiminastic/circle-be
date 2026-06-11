@@ -39,8 +39,8 @@ def _format_ist(date_time_iso: str) -> str:
 
 def subject_for(schedule_type: str) -> str:
     if schedule_type == "HR Call":
-        return "Your HR call with Curcle is scheduled"
-    return f"Your {schedule_type} at Curcle — details inside"
+        return "Your HR call with Optiminastic × Circle is scheduled"
+    return f"Your {schedule_type} at Optiminastic × Circle — details inside"
 
 
 def _build_text(
@@ -70,7 +70,7 @@ def _build_text(
         ]
     if notes:
         lines += ["", f"Notes from our team: {notes}"]
-    lines += ["", "— The Curcle HR Team"]
+    lines += ["", "— The Optiminastic × Circle HR Team"]
     return "\n".join(lines)
 
 
@@ -129,7 +129,7 @@ def _build_html(
                  style="max-width:560px;width:100%;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e1d6bc;">
             <tr>
               <td style="background:#212842;padding:16px 24px;">
-                <span style="color:#ffffff;font-size:15px;font-weight:bold;letter-spacing:0.4px;">Curcle HRMS</span>
+                <span style="color:#ffffff;font-size:15px;font-weight:bold;letter-spacing:0.4px;">Optiminastic × Circle HRMS</span>
               </td>
             </tr>
             <tr>
@@ -143,7 +143,7 @@ def _build_html(
                 </div>
                 {location_block}
                 {notes_block}
-                <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Curcle HR Team</p>
+                <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Optiminastic × Circle HR Team</p>
               </td>
             </tr>
           </table>
@@ -176,19 +176,22 @@ _RULES_HTML = """
 
 def test_email_subject(template: str, position: str | None = None) -> str:
     subjects = {
-        "iq_invite": "Your Curcle IQ Test — secure test link inside",
-        "iq_passed": "Great news — you've cleared the IQ round at Curcle",
-        "iq_failed": "Update on your application at Curcle",
-        "assessment_invite": "Your Curcle assessment — secure test link inside",
+        "iq_invite": "Your Optiminastic × Circle IQ Test — secure test link inside",
+        "iq_passed": "Great news — you've cleared the IQ round at Optiminastic × Circle",
+        "iq_failed": "Update on your application at Optiminastic × Circle",
+        "assessment_invite": "Your Optiminastic × Circle assessment — secure test link inside",
         "assessment_passed": "You've cleared the assessment — interview is next",
-        "assessment_failed": "Update on your application at Curcle",
-        "assignment_invite": "Your Curcle assignment — submit your work",
+        "assessment_failed": "Update on your application at Optiminastic × Circle",
+        "assignment_invite": "Your Optiminastic × Circle assignment — submit your work",
+        "offer_selected": "Congratulations — you're selected at Optiminastic × Circle 🎉",
     }
+    if template == "offer_selected" and position:
+        return f"You're selected for {position} at Optiminastic × Circle — confirm your availability"
     if template == "assignment_invite" and position:
-        return f"Your {position} assignment at Curcle — submit your work"
+        return f"Your {position} assignment at Optiminastic × Circle — submit your work"
     if template == "iq_passed" and position:
         return f"You've cleared the IQ round — your {position} assignment is ready"
-    return subjects.get(template, "Update from the Curcle HR Team")
+    return subjects.get(template, "Update from the Optiminastic × Circle HR Team")
 
 
 def _test_email_body_html(
@@ -207,6 +210,29 @@ def _test_email_body_html(
     pos = html.escape(position or "the role you applied for")
     url = html.escape(test_url or "#", quote=True)
     dur = duration_min or 60
+
+    if template == "offer_selected":
+        return f"""
+          <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
+          <p style="margin:0 0 14px;font-size:13.5px;color:#444;line-height:1.55;">
+            We&apos;re delighted to let you know that you&apos;ve been
+            <strong style="color:#0a7d4f;">selected for the {pos} role</strong> at
+            Optiminastic × Circle! 🎉
+          </p>
+          <p style="margin:0 0 16px;font-size:13.5px;color:#444;line-height:1.55;">
+            To move forward, please <strong>confirm your availability to join</strong> — just reply
+            to this email with your <strong>earliest joining date</strong> and any notice period you
+            need to serve.
+          </p>
+          <div style="margin:0;padding:14px 16px;background:#f0e7d5;border-radius:10px;">
+            <p style="margin:0;font-size:13px;color:#212842;">
+              Reply with: your joining date, current notice period, and any questions you have for us.
+            </p>
+          </div>
+          <p style="margin:16px 0 0;font-size:13px;color:#444;line-height:1.55;">
+            We&apos;re thrilled to have you on the team and look forward to hearing back from you.
+          </p>
+        """
 
     if template == "assignment_invite":
         return f"""
@@ -347,13 +373,13 @@ def _wrap_branded(inner: str) -> str:
                  style="max-width:560px;width:100%;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e1d6bc;">
             <tr>
               <td style="background:#212842;padding:16px 24px;">
-                <span style="color:#ffffff;font-size:15px;font-weight:bold;letter-spacing:0.4px;">Curcle HRMS</span>
+                <span style="color:#ffffff;font-size:15px;font-weight:bold;letter-spacing:0.4px;">Optiminastic × Circle HRMS</span>
               </td>
             </tr>
             <tr>
               <td style="padding:26px 26px 30px;">
                 {inner}
-                <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Curcle HR Team</p>
+                <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Optiminastic × Circle HR Team</p>
               </td>
             </tr>
           </table>
@@ -394,7 +420,7 @@ def send_test_email(
             f"{test_email_subject(template, position)}.\n"
             + (f"Test link: {test_url}\n" if test_url else "")
             + (f"Score: {score}\n" if score else "")
-            + "\n— The Curcle HR Team"
+            + "\n— The Optiminastic × Circle HR Team"
         )
 
         msg = EmailMessage()

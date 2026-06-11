@@ -16,7 +16,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "Curcle HRMS API"
+    app_name: str = "Optiminastic × Circle HRMS API"
     app_version: str = "2.0.0"
     log_level: str = "INFO"
 
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""  # login username (Gmail address, or literally "apikey")
     smtp_password: str = ""  # Gmail app password, or the provider API key
     smtp_from_email: str = ""  # verified sender; falls back to smtp_user (Gmail)
-    smtp_from_name: str = "Curcle HR Team"
+    smtp_from_name: str = "Optiminastic × Circle HR Team"
 
     # Office location for offline rounds (IQ Test / Assessment / Interview).
     office_address: str = "Optiminastic Office (set OFFICE_ADDRESS in .env)"
