@@ -88,6 +88,11 @@ def test_email(
     return {"sent": True}
 
 
+class EmailLinkIn(BaseModel):
+    label: str
+    url: str
+
+
 class CustomEmailIn(BaseModel):
     to: str
     subject: str
@@ -103,6 +108,8 @@ class CustomEmailIn(BaseModel):
     organizerName: str | None = None
     attendees: list[str] | None = None
     eventUid: str | None = None
+    # Rendered as labelled buttons (e.g. resume / interview-questions links).
+    links: list[EmailLinkIn] | None = None
 
 
 @router.post("/custom-email")
@@ -140,5 +147,6 @@ def custom_email(
         organizer_name=payload.organizerName,
         attendees=payload.attendees,
         event_uid=payload.eventUid,
+        links=[l.model_dump() for l in payload.links] if payload.links else None,
     )
     return {"sent": True}
