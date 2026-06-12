@@ -95,13 +95,13 @@ def _build_html(
     else:
         intro = f"Your <strong>{html.escape(schedule_type)}</strong> has been scheduled."
         location_block = f"""
-          <div style="margin:20px 0;padding:16px;background:#fdf6ec;border:1px solid #e1d6bc;border-radius:10px;">
-            <p style="margin:0 0 6px;font-size:14px;font-weight:bold;color:#212842;">
+          <div style="margin:20px 0;padding:16px;background:#fdeef3;border:1px solid #f3c6d8;border-radius:10px;">
+            <p style="margin:0 0 6px;font-size:14px;font-weight:bold;color:#111827;">
               📍 This round is conducted in person at our office.
             </p>
             <p style="margin:0 0 12px;font-size:13px;color:#444;">{safe_address}</p>
             <a href="{html.escape(office_maps_url, quote=True)}"
-               style="display:inline-block;background:#212842;color:#ffffff;text-decoration:none;
+               style="display:inline-block;background:#d11453;color:#ffffff;text-decoration:none;
                       font-size:13px;font-weight:bold;padding:9px 18px;border-radius:8px;">
               View on Google Maps
             </a>
@@ -121,29 +121,39 @@ def _build_html(
     return f"""\
 <!DOCTYPE html>
 <html>
-  <body style="margin:0;padding:0;background:#f0e7d5;font-family:Arial,Helvetica,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0e7d5;padding:28px 12px;">
+  <body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:28px 12px;">
       <tr>
         <td align="center">
           <table role="presentation" width="560" cellpadding="0" cellspacing="0"
-                 style="max-width:560px;width:100%;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e1d6bc;">
+                 style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
-              <td style="background:#212842;padding:16px 24px;">
-                <span style="color:#ffffff;font-size:15px;font-weight:bold;letter-spacing:0.4px;">Optiminastic × Circle HRMS</span>
+              <td style="padding:22px 28px 16px;">
+                <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
+                <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
+                <span style="vertical-align:middle;margin-left:5px;font-size:12px;color:#9aa0a6;">by Optiminastic</span>
               </td>
             </tr>
+            <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
             <tr>
-              <td style="padding:26px 26px 30px;">
+              <td style="padding:22px 28px 28px;">
                 <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
                 <p style="margin:0 0 18px;font-size:13.5px;color:#444;line-height:1.55;">{intro}</p>
-                <div style="padding:14px 16px;background:#f0e7d5;border-radius:10px;">
-                  <p style="margin:0;font-size:13px;color:#212842;">
+                <div style="padding:14px 16px;background:#f4f5f7;border-radius:10px;">
+                  <p style="margin:0;font-size:13px;color:#111827;">
                     <strong>When:</strong> {html.escape(when_ist)}
                   </p>
                 </div>
                 {location_block}
                 {notes_block}
                 <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Optiminastic × Circle HR Team</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 28px;background:#fafbfc;border-top:1px solid #eceef1;">
+                <p style="margin:0;font-size:11px;color:#9aa0a6;line-height:1.6;">
+                  Circle by Optiminastic — Talent &amp; HR · This is an automated message; reply any time if you have questions.
+                </p>
               </td>
             </tr>
           </table>
@@ -160,7 +170,7 @@ def _build_html(
 # ---------------------------------------------------------------------------
 
 _BTN_STYLE = (
-    "display:inline-block;background:#212842;color:#ffffff;text-decoration:none;"
+    "display:inline-block;background:#d11453;color:#ffffff;text-decoration:none;"
     "font-size:13px;font-weight:bold;padding:10px 20px;border-radius:8px;"
 )
 
@@ -229,8 +239,8 @@ def _test_email_body_html(
             Please find your <strong>offer letter for the {pos} role</strong> at Optiminastic × Circle.
             We&apos;re excited about the prospect of you joining us.
           </p>
-          <div style="margin:0 0 16px;padding:14px 16px;background:#f0e7d5;border-radius:10px;">
-            <p style="margin:0;font-size:13px;color:#212842;">
+          <div style="margin:0 0 16px;padding:14px 16px;background:#f4f5f7;border-radius:10px;">
+            <p style="margin:0;font-size:13px;color:#111827;">
               <strong>Next step:</strong> review the offer, and if everything looks good,
               <strong>sign it and send the signed copy back</strong> by replying to this email.
             </p>
@@ -247,8 +257,8 @@ def _test_email_body_html(
             Thank you for accepting your offer — welcome to the team! We&apos;d love to have you
             visit our office to meet everyone and complete a few joining formalities.
           </p>
-          <div style="margin:0 0 16px;padding:16px;background:#fdf6ec;border:1px solid #e1d6bc;border-radius:10px;">
-            <p style="margin:0 0 6px;font-size:14px;font-weight:bold;color:#212842;">📍 Our office</p>
+          <div style="margin:0 0 16px;padding:16px;background:#fdeef3;border:1px solid #f3c6d8;border-radius:10px;">
+            <p style="margin:0 0 6px;font-size:14px;font-weight:bold;color:#111827;">📍 Our office</p>
             <p style="margin:0 0 12px;font-size:13px;color:#444;">{html.escape(settings.office_address)}</p>
             <a href="{html.escape(settings.office_maps_url, quote=True)}" style="{_BTN_STYLE}">View on Google Maps</a>
           </div>
@@ -266,8 +276,8 @@ def _test_email_body_html(
             <strong>{pos} role</strong> at Optiminastic × Circle. This confirms your appointment and
             the terms discussed during your onboarding.
           </p>
-          <div style="margin:0 0 16px;padding:14px 16px;background:#f0e7d5;border-radius:10px;">
-            <p style="margin:0;font-size:13px;color:#212842;">
+          <div style="margin:0 0 16px;padding:14px 16px;background:#f4f5f7;border-radius:10px;">
+            <p style="margin:0;font-size:13px;color:#111827;">
               Please keep this letter for your records. Our HR team will reach out with your start-date
               logistics and first-day details.
             </p>
@@ -284,7 +294,7 @@ def _test_email_body_html(
             Welcome aboard! To complete your onboarding for <strong>{pos}</strong>, please upload your
             joining documents through your secure personal link below.
           </p>
-          <div style="margin:0 0 16px;padding:14px 16px;background:#fdf6ec;border:1px solid #e1d6bc;border-radius:10px;">
+          <div style="margin:0 0 16px;padding:14px 16px;background:#fdeef3;border:1px solid #f3c6d8;border-radius:10px;">
             <p style="margin:0;font-size:13px;font-weight:bold;color:#b91c1c;">
               ⏳ This link is valid for 24 hours only.
             </p>
@@ -292,7 +302,7 @@ def _test_email_body_html(
               If it expires before you finish, just let us know and we&apos;ll send a fresh one.
             </p>
           </div>
-          <p style="margin:0 0 8px;font-size:12.5px;font-weight:bold;color:#212842;">We&apos;ll need:</p>
+          <p style="margin:0 0 8px;font-size:12.5px;font-weight:bold;color:#111827;">We&apos;ll need:</p>
           <ul style="margin:0 0 18px;padding-left:18px;font-size:12.5px;color:#555;line-height:1.7;">
             <li>Aadhaar card &amp; PAN card</li>
             <li>Address proof</li>
@@ -321,8 +331,8 @@ def _test_email_body_html(
             join</strong> — just reply to this email with your <strong>earliest joining date</strong>
             and any notice period you need to serve.
           </p>
-          <div style="margin:0;padding:14px 16px;background:#f0e7d5;border-radius:10px;">
-            <p style="margin:0;font-size:13px;color:#212842;">
+          <div style="margin:0;padding:14px 16px;background:#f4f5f7;border-radius:10px;">
+            <p style="margin:0;font-size:13px;color:#111827;">
               Reply with: your joining date, current notice period, and any questions you have for us.
             </p>
           </div>
@@ -344,8 +354,8 @@ def _test_email_body_html(
             to this email with your <strong>earliest joining date</strong> and any notice period you
             need to serve.
           </p>
-          <div style="margin:0;padding:14px 16px;background:#f0e7d5;border-radius:10px;">
-            <p style="margin:0;font-size:13px;color:#212842;">
+          <div style="margin:0;padding:14px 16px;background:#f4f5f7;border-radius:10px;">
+            <p style="margin:0;font-size:13px;color:#111827;">
               Reply with: your joining date, current notice period, and any questions you have for us.
             </p>
           </div>
@@ -371,8 +381,8 @@ def _test_email_body_html(
 
     if template in ("iq_invite", "assessment_invite"):
         when_block = (
-            f"""<div style="padding:14px 16px;background:#f0e7d5;border-radius:10px;margin:0 0 16px;">
-                  <p style="margin:0;font-size:13px;color:#212842;"><strong>Scheduled for:</strong> {html.escape(when_ist)}</p>
+            f"""<div style="padding:14px 16px;background:#f4f5f7;border-radius:10px;margin:0 0 16px;">
+                  <p style="margin:0;font-size:13px;color:#111827;"><strong>Scheduled for:</strong> {html.escape(when_ist)}</p>
                 </div>"""
             if when_ist
             else ""
@@ -392,7 +402,7 @@ def _test_email_body_html(
           </p>
           {when_block}
           <a href="{url}" style="{_BTN_STYLE}">{btn}</a>
-          <p style="margin:18px 0 0;font-size:12.5px;font-weight:bold;color:#212842;">Before you begin:</p>
+          <p style="margin:18px 0 0;font-size:12.5px;font-weight:bold;color:#111827;">Before you begin:</p>
           {_RULES_HTML}
         """
 
@@ -448,8 +458,8 @@ def _test_email_body_html(
             The final step is an <strong>interview with our panel</strong>. Our team will reach out
             shortly to schedule it.
           </p>
-          <div style="margin:0;padding:16px;background:#fdf6ec;border:1px solid #e1d6bc;border-radius:10px;">
-            <p style="margin:0 0 6px;font-size:14px;font-weight:bold;color:#212842;">
+          <div style="margin:0;padding:16px;background:#fdeef3;border:1px solid #f3c6d8;border-radius:10px;">
+            <p style="margin:0 0 6px;font-size:14px;font-weight:bold;color:#111827;">
               📍 The interview is conducted in person at our office.
             </p>
             <p style="margin:0 0 12px;font-size:13px;color:#444;">{html.escape(settings.office_address)}</p>
@@ -485,21 +495,31 @@ def _wrap_branded(inner: str) -> str:
     return f"""\
 <!DOCTYPE html>
 <html>
-  <body style="margin:0;padding:0;background:#f0e7d5;font-family:Arial,Helvetica,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0e7d5;padding:28px 12px;">
+  <body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:28px 12px;">
       <tr>
         <td align="center">
           <table role="presentation" width="560" cellpadding="0" cellspacing="0"
-                 style="max-width:560px;width:100%;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e1d6bc;">
+                 style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
-              <td style="background:#212842;padding:16px 24px;">
-                <span style="color:#ffffff;font-size:15px;font-weight:bold;letter-spacing:0.4px;">Optiminastic × Circle HRMS</span>
+              <td style="padding:22px 28px 16px;">
+                <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
+                <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
+                <span style="vertical-align:middle;margin-left:5px;font-size:12px;color:#9aa0a6;">by Optiminastic</span>
+              </td>
+            </tr>
+            <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
+            <tr>
+              <td style="padding:22px 28px 28px;">
+                {inner}
+                <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Optiminastic × Circle HR Team</p>
               </td>
             </tr>
             <tr>
-              <td style="padding:26px 26px 30px;">
-                {inner}
-                <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Optiminastic × Circle HR Team</p>
+              <td style="padding:16px 28px;background:#fafbfc;border-top:1px solid #eceef1;">
+                <p style="margin:0;font-size:11px;color:#9aa0a6;line-height:1.6;">
+                  Circle by Optiminastic — Talent &amp; HR · This is an automated message; reply any time if you have questions.
+                </p>
               </td>
             </tr>
           </table>
@@ -564,20 +584,30 @@ def _wrap_custom(inner: str) -> str:
     return f"""\
 <!DOCTYPE html>
 <html>
-  <body style="margin:0;padding:0;background:#f0e7d5;font-family:Arial,Helvetica,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0e7d5;padding:28px 12px;">
+  <body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:28px 12px;">
       <tr>
         <td align="center">
           <table role="presentation" width="560" cellpadding="0" cellspacing="0"
-                 style="max-width:560px;width:100%;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e1d6bc;">
+                 style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
-              <td style="background:#212842;padding:16px 24px;">
-                <span style="color:#ffffff;font-size:15px;font-weight:bold;letter-spacing:0.4px;">Circle by Optiminastic</span>
+              <td style="padding:22px 28px 16px;">
+                <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
+                <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
+                <span style="vertical-align:middle;margin-left:5px;font-size:12px;color:#9aa0a6;">by Optiminastic</span>
+              </td>
+            </tr>
+            <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
+            <tr>
+              <td style="padding:22px 28px 28px;font-size:13.5px;color:#1a1a1a;line-height:1.6;">
+                {inner}
               </td>
             </tr>
             <tr>
-              <td style="padding:26px 26px 30px;font-size:13.5px;color:#1a1a1a;line-height:1.6;">
-                {inner}
+              <td style="padding:16px 28px;background:#fafbfc;border-top:1px solid #eceef1;">
+                <p style="margin:0;font-size:11px;color:#9aa0a6;line-height:1.6;">
+                  Circle by Optiminastic — Talent &amp; HR · This is an automated message; reply any time if you have questions.
+                </p>
               </td>
             </tr>
           </table>
