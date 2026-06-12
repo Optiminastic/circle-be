@@ -706,13 +706,29 @@ def send_custom_email(
     organizer_name: str | None = None,
     attendees: list[str] | None = None,
     event_uid: str | None = None,
+    links: list[dict[str, str]] | None = None,
 ) -> None:
     """Send an HR-composed (and possibly edited) email, wrapped in the branded
     shell. When event details are supplied, a Google Calendar invite (.ics,
     METHOD:REQUEST) is attached so the event lands on every attendee's calendar.
+    `links` are rendered as labelled buttons (HTML) / "Label: url" (plain text).
     Logs failures, never raises (runs inside a BackgroundTask)."""
     try:
         inner = html.escape(body).replace("\n", "<br/>")
+        text_body = body
+
+        valid_links = [l for l in (links or []) if l.get("url") and l.get("label")]
+        if valid_links:
+            buttons = "".join(
+                f'<a href="{html.escape(l["url"], quote=True)}" '
+                'style="display:inline-block;margin:6px 8px 0 0;padding:10px 16px;'
+                'background:#9a1f33;color:#ffffff;text-decoration:none;border-radius:8px;'
+                f'font-size:13px;font-weight:bold;">{html.escape(l["label"])}</a>'
+                for l in valid_links
+            )
+            inner += f'<div style="margin-top:18px;">{buttons}</div>'
+            text_body += "\n\n" + "\n".join(f'{l["label"]}: {l["url"]}' for l in valid_links)
+
         recipients = [to] + [c for c in (cc or []) if c.strip()]
 
         msg = EmailMessage()
@@ -721,7 +737,7 @@ def send_custom_email(
         msg["To"] = to
         if cc:
             msg["Cc"] = ", ".join(c.strip() for c in cc if c.strip())
-        msg.set_content(body)
+        msg.set_content(text_body)
         msg.add_alternative(_wrap_custom(inner), subtype="html")
 
         if event_start_iso:
