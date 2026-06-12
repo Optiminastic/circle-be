@@ -103,6 +103,8 @@ class PushEventIn(BaseModel):
     durationMin: int = 45
     notes: str | None = None
     attendeeEmail: str | None = None
+    attendees: list[str] | None = None  # candidate / interviewer / HR
+    location: str | None = None  # office address or meeting link
 
 
 @router.post("/events")
@@ -130,6 +132,8 @@ def push_event(
             start_iso=payload.dateTimeIso,
             duration_min=payload.durationMin,
             attendee_email=payload.attendeeEmail,
+            attendees=payload.attendees,
+            location=payload.location,
             google_event_id=google_event_id,
             request_id=payload.appEventId,
         )
@@ -146,7 +150,11 @@ def push_event(
             "calendarId": settings.google_calendar_id,
         },
     )
-    return {"pushed": True, "meetLink": result.get("hangoutLink")}
+    return {
+        "pushed": True,
+        "meetLink": result.get("hangoutLink"),
+        "googleEventId": result.get("id"),
+    }
 
 
 @router.delete("/events/{app_event_id}")
