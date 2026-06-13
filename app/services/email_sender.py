@@ -82,7 +82,7 @@ def _deliver_sendgrid(settings: Settings, msg: EmailMessage) -> None:
         _SENDGRID_URL,
         data=json.dumps(body).encode("utf-8"),
         headers={
-            "Authorization": f"Bearer {settings.sendgrid_api_key}",
+            "Authorization": f"Bearer {settings.sendgrid_key}",
             "Content-Type": "application/json",
         },
         method="POST",
@@ -102,7 +102,7 @@ def _deliver(settings: Settings, msg: EmailMessage, to_addrs: list[str] | None =
     that block SMTP). Otherwise uses SMTP — implicit TLS (SMTP_SSL) on port 465,
     STARTTLS elsewhere. Raises on failure; callers log and swallow.
     """
-    if settings.sendgrid_api_key:
+    if settings.sendgrid_key:
         _deliver_sendgrid(settings, msg)
         return
 

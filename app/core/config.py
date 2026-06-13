@@ -103,9 +103,24 @@ class Settings(BaseSettings):
         return bool(self.b2_key_id and self.b2_bucket and self.b2_endpoint)
 
     @property
+    def sendgrid_key(self) -> str:
+        """The SendGrid API key for the HTTPS transport.
+
+        Uses SENDGRID_API_KEY if set, otherwise reuses the SMTP password when the
+        SMTP config already points at SendGrid (host smtp.sendgrid.net, user
+        'apikey'). This lets an existing SendGrid-over-SMTP setup switch to the
+        API automatically on hosts that block SMTP — no new env var needed.
+        """
+        if self.sendgrid_api_key:
+            return self.sendgrid_api_key
+        if "sendgrid" in self.smtp_host.lower() and self.smtp_user.lower() == "apikey":
+            return self.smtp_password
+        return ""
+
+    @property
     def has_smtp(self) -> bool:
         # True when ANY email transport is configured (SendGrid HTTP or SMTP).
-        return bool(self.sendgrid_api_key or (self.smtp_user and self.smtp_password))
+        return bool(self.sendgrid_key or (self.smtp_user and self.smtp_password))
 
     @property
     def from_address(self) -> str:
