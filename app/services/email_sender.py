@@ -13,8 +13,19 @@ from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+
+
+def _brand_header() -> str:
+    """Email header lockup: the real Optiminastic logo (hosted) × the Circle mark."""
+    logo = f"{get_settings().frontend_url.rstrip('/')}/optiminastic-logo.png"
+    return f"""              <td style="padding:20px 28px 16px;">
+                <img src="{logo}" alt="Optiminastic" height="26" style="height:26px;display:inline-block;vertical-align:middle;border:0;" />
+                <span style="vertical-align:middle;margin:0 10px;font-size:14px;color:#d0d3d8;">&times;</span>
+                <span style="display:inline-block;width:22px;height:22px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:22px;font-weight:bold;font-size:13px;vertical-align:middle;">C</span>
+                <span style="vertical-align:middle;margin-left:7px;font-size:15px;font-weight:600;color:#374151;">Circle</span>
+              </td>"""
 
 logger = get_logger("curcle.email")
 
@@ -128,11 +139,7 @@ def _build_html(
           <table role="presentation" width="560" cellpadding="0" cellspacing="0"
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
-              <td style="padding:22px 28px 16px;">
-                <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
-                <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
-                <span style="vertical-align:middle;margin-left:5px;font-size:12px;color:#9aa0a6;">by Optiminastic</span>
-              </td>
+{_brand_header()}
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
             <tr>
@@ -502,11 +509,7 @@ def _wrap_branded(inner: str) -> str:
           <table role="presentation" width="560" cellpadding="0" cellspacing="0"
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
-              <td style="padding:22px 28px 16px;">
-                <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
-                <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
-                <span style="vertical-align:middle;margin-left:5px;font-size:12px;color:#9aa0a6;">by Optiminastic</span>
-              </td>
+{_brand_header()}
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
             <tr>
@@ -591,11 +594,7 @@ def _wrap_custom(inner: str) -> str:
           <table role="presentation" width="560" cellpadding="0" cellspacing="0"
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
-              <td style="padding:22px 28px 16px;">
-                <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
-                <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
-                <span style="vertical-align:middle;margin-left:5px;font-size:12px;color:#9aa0a6;">by Optiminastic</span>
-              </td>
+{_brand_header()}
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
             <tr>
