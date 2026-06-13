@@ -64,10 +64,25 @@ def _deliver_sendgrid(settings: Settings, msg: EmailMessage) -> None:
     if not content:
         content.append({"type": "text/plain", "value": ""})
 
-    personalization: dict[str, object] = {"to": _addr_list(msg, "To")}
-    cc = _addr_list(msg, "Cc")
-    if cc:
-        personalization["cc"] = cc
+    # SendGrid requires every address to be unique across to/cc/bcc — dedupe the
+    # To list, then drop any Cc that repeats a To (or another Cc).
+    to_addrs: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for a in _addr_list(msg, "To"):
+        key = a["email"].lower()
+        if key and key not in seen:
+            seen.add(key)
+            to_addrs.append(a)
+    cc_addrs: list[dict[str, str]] = []
+    for a in _addr_list(msg, "Cc"):
+        key = a["email"].lower()
+        if key and key not in seen:
+            seen.add(key)
+            cc_addrs.append(a)
+
+    personalization: dict[str, object] = {"to": to_addrs}
+    if cc_addrs:
+        personalization["cc"] = cc_addrs
 
     body: dict[str, object] = {
         "personalizations": [personalization],
