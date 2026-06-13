@@ -18,6 +18,31 @@ from app.core.logging import get_logger
 
 logger = get_logger("curcle.email")
 
+# How long to wait for the SMTP TCP connection before giving up.
+_SMTP_TIMEOUT = 20
+
+
+def _deliver(settings: Settings, msg: EmailMessage, to_addrs: list[str] | None = None) -> None:
+    """Connect, authenticate and send one message.
+
+    Uses implicit TLS (SMTP_SSL) on port 465, otherwise STARTTLS — so deployments
+    on networks that block one port (e.g. 587) can switch to the other by setting
+    SMTP_PORT. Raises on failure; callers log and swallow.
+    """
+    if settings.smtp_port == 465:
+        smtp = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=_SMTP_TIMEOUT)
+    else:
+        smtp = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=_SMTP_TIMEOUT)
+    with smtp:
+        if settings.smtp_port != 465:
+            smtp.starttls()
+        smtp.login(settings.smtp_user, settings.smtp_password)
+        if to_addrs is not None:
+            smtp.send_message(msg, to_addrs=to_addrs)
+        else:
+            smtp.send_message(msg)
+
+
 # Rounds conducted in person at the office (everything except the HR call).
 OFFLINE_TYPES = {"IQ Test", "Assessment", "Interview"}
 
@@ -570,10 +595,7 @@ def send_test_email(
         msg.set_content(text_fallback)
         msg.add_alternative(_wrap_branded(inner), subtype="html")
 
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as smtp:
-            smtp.starttls()
-            smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(msg)
+        _deliver(settings, msg)
         logger.info("Test email '%s' sent to %s.", template, to)
     except Exception:  # noqa: BLE001 - background task must never propagate
         logger.exception("Failed to send test email '%s' to %s.", template, to)
@@ -760,10 +782,7 @@ def send_custom_email(
                 params={"method": "REQUEST", "name": "invite.ics"},
             )
 
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as smtp:
-            smtp.starttls()
-            smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(msg, to_addrs=recipients)
+        _deliver(settings, msg, to_addrs=recipients)
         logger.info("Custom email sent to %s.", to)
     except Exception:  # noqa: BLE001 - background task must never propagate
         logger.exception("Failed to send custom email to %s.", to)
@@ -798,10 +817,7 @@ def send_schedule_email(
             subtype="html",
         )
 
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as smtp:
-            smtp.starttls()
-            smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(msg)
+        _deliver(settings, msg)
         logger.info("Schedule email (%s) sent to %s.", schedule_type, to)
     except Exception:  # noqa: BLE001 - background task must never propagate
         logger.exception("Failed to send schedule email (%s) to %s.", schedule_type, to)
