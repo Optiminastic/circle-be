@@ -7,8 +7,12 @@ because an email could not be delivered).
 
 from __future__ import annotations
 
+import base64
 import html
+import json
 import smtplib
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
@@ -28,6 +32,119 @@ def _brand_header() -> str:
               </td>"""
 
 logger = get_logger("curcle.email")
+
+# How long to wait for an SMTP/HTTP connection before giving up.
+_SMTP_TIMEOUT = 20
+_SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send"
+
+
+def _addr_list(msg: EmailMessage, header: str) -> list[dict[str, str]]:
+    raw = msg.get(header) or ""
+    return [{"email": a.strip()} for a in raw.split(",") if a.strip()]
+
+
+def _deliver_sendgrid(settings: Settings, msg: EmailMessage) -> None:
+    """Send via SendGrid's HTTPS API (works where outbound SMTP is blocked, e.g.
+    Render's free tier). Extracts the text/HTML parts + any attachments from the
+    already-built EmailMessage. Raises on failure; callers log and swallow."""
+    text_value, html_value = "", ""
+    attachments: list[dict[str, str]] = []
+    for part in msg.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        if part.get_content_disposition() == "attachment":
+            payload = part.get_payload(decode=True) or b""
+            attachments.append(
+                {
+                    "content": base64.b64encode(payload).decode("ascii"),
+                    "filename": part.get_filename() or "attachment",
+                    "type": part.get_content_type(),
+                    "disposition": "attachment",
+                }
+            )
+        elif part.get_content_type() == "text/plain" and not text_value:
+            text_value = part.get_content()
+        elif part.get_content_type() == "text/html" and not html_value:
+            html_value = part.get_content()
+
+    content = []
+    if text_value:
+        content.append({"type": "text/plain", "value": text_value})
+    if html_value:
+        content.append({"type": "text/html", "value": html_value})
+    if not content:
+        content.append({"type": "text/plain", "value": ""})
+
+    # SendGrid requires every address to be unique across to/cc/bcc — dedupe the
+    # To list, then drop any Cc that repeats a To (or another Cc).
+    to_addrs: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for a in _addr_list(msg, "To"):
+        key = a["email"].lower()
+        if key and key not in seen:
+            seen.add(key)
+            to_addrs.append(a)
+    cc_addrs: list[dict[str, str]] = []
+    for a in _addr_list(msg, "Cc"):
+        key = a["email"].lower()
+        if key and key not in seen:
+            seen.add(key)
+            cc_addrs.append(a)
+
+    personalization: dict[str, object] = {"to": to_addrs}
+    if cc_addrs:
+        personalization["cc"] = cc_addrs
+
+    body: dict[str, object] = {
+        "personalizations": [personalization],
+        "from": {"email": settings.from_address, "name": settings.smtp_from_name},
+        "subject": msg.get("Subject") or "",
+        "content": content,
+    }
+    if attachments:
+        body["attachments"] = attachments
+
+    req = urllib.request.Request(
+        _SENDGRID_URL,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {settings.sendgrid_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_SMTP_TIMEOUT):  # noqa: S310 (fixed host)
+            return  # 202 Accepted
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:500]
+        raise RuntimeError(f"SendGrid {exc.code}: {detail}") from exc
+
+
+def _deliver(settings: Settings, msg: EmailMessage, to_addrs: list[str] | None = None) -> None:
+    """Send one message via the configured transport.
+
+    Prefers the SendGrid HTTP API when SENDGRID_API_KEY is set (works on networks
+    that block SMTP). Otherwise uses SMTP — implicit TLS (SMTP_SSL) on port 465,
+    STARTTLS elsewhere. Raises on failure; callers log and swallow.
+    """
+    if settings.sendgrid_key:
+        _deliver_sendgrid(settings, msg)
+        return
+
+    if settings.smtp_port == 465:
+        smtp = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=_SMTP_TIMEOUT)
+    else:
+        smtp = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=_SMTP_TIMEOUT)
+    with smtp:
+        if settings.smtp_port != 465:
+            smtp.starttls()
+        smtp.login(settings.smtp_user, settings.smtp_password)
+        if to_addrs is not None:
+            smtp.send_message(msg, to_addrs=to_addrs)
+        else:
+            smtp.send_message(msg)
+
 
 # Rounds conducted in person at the office (everything except the HR call).
 OFFLINE_TYPES = {"IQ Test", "Assessment", "Interview"}
@@ -544,7 +661,7 @@ def send_test_email(
     score: str | None = None,
     duration_min: int | None = None,
     date_time_iso: str | None = None,
-) -> None:
+) -> bool:
     """Send one of the test-pipeline emails. Logs failures, never raises."""
     try:
         when_ist = _format_ist(date_time_iso) if date_time_iso else None
@@ -573,13 +690,12 @@ def send_test_email(
         msg.set_content(text_fallback)
         msg.add_alternative(_wrap_branded(inner), subtype="html")
 
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as smtp:
-            smtp.starttls()
-            smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(msg)
+        _deliver(settings, msg)
         logger.info("Test email '%s' sent to %s.", template, to)
-    except Exception:  # noqa: BLE001 - background task must never propagate
+        return True
+    except Exception:  # noqa: BLE001 - never propagate; report failure to caller
         logger.exception("Failed to send test email '%s' to %s.", template, to)
+        return False
 
 
 def _wrap_custom(inner: str) -> str:
@@ -706,7 +822,7 @@ def send_custom_email(
     attendees: list[str] | None = None,
     event_uid: str | None = None,
     links: list[dict[str, str]] | None = None,
-) -> None:
+) -> bool:
     """Send an HR-composed (and possibly edited) email, wrapped in the branded
     shell. When event details are supplied, a Google Calendar invite (.ics,
     METHOD:REQUEST) is attached so the event lands on every attendee's calendar.
@@ -759,13 +875,12 @@ def send_custom_email(
                 params={"method": "REQUEST", "name": "invite.ics"},
             )
 
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as smtp:
-            smtp.starttls()
-            smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(msg, to_addrs=recipients)
+        _deliver(settings, msg, to_addrs=recipients)
         logger.info("Custom email sent to %s.", to)
-    except Exception:  # noqa: BLE001 - background task must never propagate
+        return True
+    except Exception:  # noqa: BLE001 - never propagate; report failure to caller
         logger.exception("Failed to send custom email to %s.", to)
+        return False
 
 
 def send_schedule_email(
@@ -775,7 +890,7 @@ def send_schedule_email(
     schedule_type: str,
     date_time_iso: str,
     notes: str | None = None,
-) -> None:
+) -> bool:
     """Compose and deliver the schedule notification. Logs failures, never raises."""
     try:
         when_ist = _format_ist(date_time_iso)
@@ -797,10 +912,9 @@ def send_schedule_email(
             subtype="html",
         )
 
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as smtp:
-            smtp.starttls()
-            smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(msg)
+        _deliver(settings, msg)
         logger.info("Schedule email (%s) sent to %s.", schedule_type, to)
-    except Exception:  # noqa: BLE001 - background task must never propagate
+        return True
+    except Exception:  # noqa: BLE001 - never propagate; report failure to caller
         logger.exception("Failed to send schedule email (%s) to %s.", schedule_type, to)
+        return False

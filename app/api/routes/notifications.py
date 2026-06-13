@@ -1,16 +1,16 @@
 """Candidate notification endpoints.
 
-Email delivery is best-effort by design: the endpoint always returns 200 with a
-{sent, reason?} body so the scheduling flow on the frontend is never blocked or
-broken by mail configuration/connectivity issues. The actual SMTP send runs in
-a BackgroundTask after the response is flushed.
+The email is sent synchronously and the endpoint returns {sent: bool, reason?},
+so the frontend can show the real "sent / failed" outcome. Sends never raise
+(failures are logged and reported as sent:false), so a mail problem never breaks
+the scheduling flow — it just surfaces as a failed-to-send result in the UI.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.core.config import Settings, get_settings
@@ -30,7 +30,6 @@ class ScheduleEmailIn(BaseModel):
 @router.post("/schedule-email")
 def schedule_email(
     payload: ScheduleEmailIn,
-    background: BackgroundTasks,
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     if not payload.to.strip():
@@ -38,8 +37,7 @@ def schedule_email(
     if not settings.has_smtp:
         return {"sent": False, "reason": "not_configured"}
 
-    background.add_task(
-        send_schedule_email,
+    sent = send_schedule_email(
         settings=settings,
         to=payload.to.strip(),
         candidate_name=payload.candidateName,
@@ -47,7 +45,7 @@ def schedule_email(
         date_time_iso=payload.dateTimeIso,
         notes=payload.notes,
     )
-    return {"sent": True}
+    return {"sent": sent} if sent else {"sent": False, "reason": "send_failed"}
 
 
 class TestEmailIn(BaseModel):
@@ -65,7 +63,6 @@ class TestEmailIn(BaseModel):
 @router.post("/test-email")
 def test_email(
     payload: TestEmailIn,
-    background: BackgroundTasks,
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     if not payload.to.strip():
@@ -73,8 +70,7 @@ def test_email(
     if not settings.has_smtp:
         return {"sent": False, "reason": "not_configured"}
 
-    background.add_task(
-        send_test_email,
+    sent = send_test_email(
         settings=settings,
         to=payload.to.strip(),
         candidate_name=payload.candidateName,
@@ -85,7 +81,7 @@ def test_email(
         duration_min=payload.durationMin,
         date_time_iso=payload.dateTimeIso,
     )
-    return {"sent": True}
+    return {"sent": sent} if sent else {"sent": False, "reason": "send_failed"}
 
 
 class EmailLinkIn(BaseModel):
@@ -115,14 +111,12 @@ class CustomEmailIn(BaseModel):
 @router.post("/custom-email")
 def custom_email(
     payload: CustomEmailIn,
-    background: BackgroundTasks,
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     """Send an HR-composed email (e.g. an interview invitation the HR edited),
     optionally with a Google Calendar invite attached.
 
-    Best-effort, mirroring the other notification endpoints: always returns 200
-    with {sent, reason?} so the scheduling flow is never blocked.
+    Returns {sent, reason?} reflecting the real delivery result; never raises.
     """
     if not payload.to.strip():
         return {"sent": False, "reason": "no_recipient"}
@@ -131,8 +125,7 @@ def custom_email(
     if not settings.has_smtp:
         return {"sent": False, "reason": "not_configured"}
 
-    background.add_task(
-        send_custom_email,
+    sent = send_custom_email(
         settings=settings,
         to=payload.to.strip(),
         subject=payload.subject,
@@ -149,4 +142,4 @@ def custom_email(
         event_uid=payload.eventUid,
         links=[l.model_dump() for l in payload.links] if payload.links else None,
     )
-    return {"sent": True}
+    return {"sent": sent} if sent else {"sent": False, "reason": "send_failed"}
