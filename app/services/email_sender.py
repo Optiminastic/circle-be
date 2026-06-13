@@ -643,7 +643,7 @@ def send_test_email(
     score: str | None = None,
     duration_min: int | None = None,
     date_time_iso: str | None = None,
-) -> None:
+) -> bool:
     """Send one of the test-pipeline emails. Logs failures, never raises."""
     try:
         when_ist = _format_ist(date_time_iso) if date_time_iso else None
@@ -674,8 +674,10 @@ def send_test_email(
 
         _deliver(settings, msg)
         logger.info("Test email '%s' sent to %s.", template, to)
-    except Exception:  # noqa: BLE001 - background task must never propagate
+        return True
+    except Exception:  # noqa: BLE001 - never propagate; report failure to caller
         logger.exception("Failed to send test email '%s' to %s.", template, to)
+        return False
 
 
 def _wrap_custom(inner: str) -> str:
@@ -806,7 +808,7 @@ def send_custom_email(
     attendees: list[str] | None = None,
     event_uid: str | None = None,
     links: list[dict[str, str]] | None = None,
-) -> None:
+) -> bool:
     """Send an HR-composed (and possibly edited) email, wrapped in the branded
     shell. When event details are supplied, a Google Calendar invite (.ics,
     METHOD:REQUEST) is attached so the event lands on every attendee's calendar.
@@ -861,8 +863,10 @@ def send_custom_email(
 
         _deliver(settings, msg, to_addrs=recipients)
         logger.info("Custom email sent to %s.", to)
-    except Exception:  # noqa: BLE001 - background task must never propagate
+        return True
+    except Exception:  # noqa: BLE001 - never propagate; report failure to caller
         logger.exception("Failed to send custom email to %s.", to)
+        return False
 
 
 def send_schedule_email(
@@ -872,7 +876,7 @@ def send_schedule_email(
     schedule_type: str,
     date_time_iso: str,
     notes: str | None = None,
-) -> None:
+) -> bool:
     """Compose and deliver the schedule notification. Logs failures, never raises."""
     try:
         when_ist = _format_ist(date_time_iso)
@@ -896,5 +900,7 @@ def send_schedule_email(
 
         _deliver(settings, msg)
         logger.info("Schedule email (%s) sent to %s.", schedule_type, to)
-    except Exception:  # noqa: BLE001 - background task must never propagate
+        return True
+    except Exception:  # noqa: BLE001 - never propagate; report failure to caller
         logger.exception("Failed to send schedule email (%s) to %s.", schedule_type, to)
+        return False
