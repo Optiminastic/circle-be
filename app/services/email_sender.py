@@ -7,8 +7,12 @@ because an email could not be delivered).
 
 from __future__ import annotations
 
+import base64
 import html
+import json
 import smtplib
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
@@ -18,17 +22,90 @@ from app.core.logging import get_logger
 
 logger = get_logger("curcle.email")
 
-# How long to wait for the SMTP TCP connection before giving up.
+# How long to wait for an SMTP/HTTP connection before giving up.
 _SMTP_TIMEOUT = 20
+_SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send"
+
+
+def _addr_list(msg: EmailMessage, header: str) -> list[dict[str, str]]:
+    raw = msg.get(header) or ""
+    return [{"email": a.strip()} for a in raw.split(",") if a.strip()]
+
+
+def _deliver_sendgrid(settings: Settings, msg: EmailMessage) -> None:
+    """Send via SendGrid's HTTPS API (works where outbound SMTP is blocked, e.g.
+    Render's free tier). Extracts the text/HTML parts + any attachments from the
+    already-built EmailMessage. Raises on failure; callers log and swallow."""
+    text_value, html_value = "", ""
+    attachments: list[dict[str, str]] = []
+    for part in msg.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        if part.get_content_disposition() == "attachment":
+            payload = part.get_payload(decode=True) or b""
+            attachments.append(
+                {
+                    "content": base64.b64encode(payload).decode("ascii"),
+                    "filename": part.get_filename() or "attachment",
+                    "type": part.get_content_type(),
+                    "disposition": "attachment",
+                }
+            )
+        elif part.get_content_type() == "text/plain" and not text_value:
+            text_value = part.get_content()
+        elif part.get_content_type() == "text/html" and not html_value:
+            html_value = part.get_content()
+
+    content = []
+    if text_value:
+        content.append({"type": "text/plain", "value": text_value})
+    if html_value:
+        content.append({"type": "text/html", "value": html_value})
+    if not content:
+        content.append({"type": "text/plain", "value": ""})
+
+    personalization: dict[str, object] = {"to": _addr_list(msg, "To")}
+    cc = _addr_list(msg, "Cc")
+    if cc:
+        personalization["cc"] = cc
+
+    body: dict[str, object] = {
+        "personalizations": [personalization],
+        "from": {"email": settings.from_address, "name": settings.smtp_from_name},
+        "subject": msg.get("Subject") or "",
+        "content": content,
+    }
+    if attachments:
+        body["attachments"] = attachments
+
+    req = urllib.request.Request(
+        _SENDGRID_URL,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {settings.sendgrid_api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_SMTP_TIMEOUT):  # noqa: S310 (fixed host)
+            return  # 202 Accepted
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:500]
+        raise RuntimeError(f"SendGrid {exc.code}: {detail}") from exc
 
 
 def _deliver(settings: Settings, msg: EmailMessage, to_addrs: list[str] | None = None) -> None:
-    """Connect, authenticate and send one message.
+    """Send one message via the configured transport.
 
-    Uses implicit TLS (SMTP_SSL) on port 465, otherwise STARTTLS — so deployments
-    on networks that block one port (e.g. 587) can switch to the other by setting
-    SMTP_PORT. Raises on failure; callers log and swallow.
+    Prefers the SendGrid HTTP API when SENDGRID_API_KEY is set (works on networks
+    that block SMTP). Otherwise uses SMTP — implicit TLS (SMTP_SSL) on port 465,
+    STARTTLS elsewhere. Raises on failure; callers log and swallow.
     """
+    if settings.sendgrid_api_key:
+        _deliver_sendgrid(settings, msg)
+        return
+
     if settings.smtp_port == 465:
         smtp = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=_SMTP_TIMEOUT)
     else:

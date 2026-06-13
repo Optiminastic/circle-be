@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     smtp_password: str = ""  # Gmail app password, or the provider API key
     smtp_from_email: str = ""  # verified sender; falls back to smtp_user (Gmail)
     smtp_from_name: str = "Optiminastic × Circle HR Team"
+    # SendGrid HTTP API (used INSTEAD of SMTP when set — required on hosts that
+    # block outbound SMTP, e.g. Render free tier). Send over HTTPS, no SMTP ports.
+    # Requires a verified sender/domain in SendGrid and SMTP_FROM_EMAIL set to it.
+    sendgrid_api_key: str = ""
 
     # Office location for offline rounds (IQ Test / Assessment / Interview).
     office_address: str = "Optiminastic Office (set OFFICE_ADDRESS in .env)"
@@ -100,7 +104,8 @@ class Settings(BaseSettings):
 
     @property
     def has_smtp(self) -> bool:
-        return bool(self.smtp_user and self.smtp_password)
+        # True when ANY email transport is configured (SendGrid HTTP or SMTP).
+        return bool(self.sendgrid_api_key or (self.smtp_user and self.smtp_password))
 
     @property
     def from_address(self) -> str:
