@@ -157,8 +157,8 @@ def _format_ist(date_time_iso: str) -> str:
 
 def subject_for(schedule_type: str) -> str:
     if schedule_type == "HR Call":
-        return "Your HR call with Optiminastic × Circle is scheduled"
-    return f"Your {schedule_type} at Optiminastic × Circle — details inside"
+        return "Your HR call with Optiminastic is scheduled"
+    return f"Your {schedule_type} at Optiminastic — details inside"
 
 
 def _build_text(
@@ -247,10 +247,7 @@ def _build_html(
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
               <td style="padding:22px 28px 16px;">
-                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="24" style="height:24px;width:auto;vertical-align:middle;border:0;" />
-                <span style="vertical-align:middle;margin:0 9px;font-size:14px;color:#9aa0a6;">×</span>
-                <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
-                <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
+                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="72" style="height:72px;width:auto;vertical-align:middle;border:0;" />
               </td>
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
@@ -298,33 +295,33 @@ _RULES_HTML = """
 
 def test_email_subject(template: str, position: str | None = None) -> str:
     subjects = {
-        "iq_invite": "Your Optiminastic × Circle IQ Test — secure test link inside",
-        "iq_passed": "Great news — you've cleared the IQ round at Optiminastic × Circle",
-        "iq_failed": "Update on your application at Optiminastic × Circle",
-        "assessment_invite": "Your Optiminastic × Circle assessment — secure test link inside",
+        "iq_invite": "Your Optiminastic IQ Test — secure test link inside",
+        "iq_passed": "Great news — you've cleared the IQ round at Optiminastic",
+        "iq_failed": "Update on your application at Optiminastic",
+        "assessment_invite": "Your Optiminastic assessment — secure test link inside",
         "assessment_passed": "You've cleared the assessment — interview is next",
-        "assessment_failed": "Update on your application at Optiminastic × Circle",
-        "assignment_invite": "Your Optiminastic × Circle assignment — submit your work",
+        "assessment_failed": "Update on your application at Optiminastic",
+        "assignment_invite": "Your Optiminastic assignment — submit your work",
         "doc_request": "Action needed — upload your onboarding documents (link valid 24 hours)",
-        "offer_shortlisted": "Great news — you've been shortlisted at Optiminastic × Circle ✨",
-        "offer_selected": "Congratulations — you're selected at Optiminastic × Circle 🎉",
-        "offer_letter": "Your offer letter from Optiminastic × Circle — please review & sign",
-        "office_invite": "You're invited to our office — Optiminastic × Circle",
-        "appointment_letter": "Your letter of appointment — Optiminastic × Circle",
+        "offer_shortlisted": "Great news — you've been shortlisted at Optiminastic ✨",
+        "offer_selected": "Congratulations — you're selected at Optiminastic 🎉",
+        "offer_letter": "Your offer letter from Optiminastic — please review & sign",
+        "office_invite": "You're invited to our office — Optiminastic",
+        "appointment_letter": "Your letter of appointment — Optiminastic",
     }
     if template == "offer_letter" and position:
-        return f"Your offer letter for {position} at Optiminastic × Circle — please review & sign"
+        return f"Your offer letter for {position} at Optiminastic — please review & sign"
     if template == "appointment_letter" and position:
-        return f"Letter of appointment — {position} at Optiminastic × Circle"
+        return f"Letter of appointment — {position} at Optiminastic"
     if template == "offer_shortlisted" and position:
-        return f"You're shortlisted for {position} at Optiminastic × Circle — confirm your availability"
+        return f"You're shortlisted for {position} at Optiminastic — confirm your availability"
     if template == "offer_selected" and position:
-        return f"You're selected for {position} at Optiminastic × Circle — confirm your availability"
+        return f"You're selected for {position} at Optiminastic — confirm your availability"
     if template == "assignment_invite" and position:
-        return f"Your {position} assignment at Optiminastic × Circle — submit your work"
+        return f"Your {position} assignment at Optiminastic — submit your work"
     if template == "iq_passed" and position:
         return f"You've cleared the IQ round — your {position} assignment is ready"
-    return subjects.get(template, "Update from the Optiminastic × Circle HR Team")
+    return subjects.get(template, "Update from the Optiminastic HR Team")
 
 
 def _test_email_body_html(
@@ -615,10 +612,7 @@ def _wrap_branded(inner: str) -> str:
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
               <td style="padding:22px 28px 16px;">
-                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="24" style="height:24px;width:auto;vertical-align:middle;border:0;" />
-                <span style="vertical-align:middle;margin:0 9px;font-size:14px;color:#9aa0a6;">×</span>
-                <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
-                <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
+                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="72" style="height:72px;width:auto;vertical-align:middle;border:0;" />
               </td>
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
@@ -697,10 +691,7 @@ def _wrap_custom(inner: str) -> str:
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
               <td style="padding:22px 28px 16px;">
-                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="24" style="height:24px;width:auto;vertical-align:middle;border:0;" />
-                <span style="vertical-align:middle;margin:0 9px;font-size:14px;color:#9aa0a6;">×</span>
-                <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
-                <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
+                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="72" style="height:72px;width:auto;vertical-align:middle;border:0;" />
               </td>
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
