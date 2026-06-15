@@ -188,7 +188,7 @@ def _build_text(
         ]
     if notes:
         lines += ["", f"Notes from our team: {notes}"]
-    lines += ["", "— The Optiminastic × Circle HR Team"]
+    lines += ["", "— The Optiminastic HR Team"]
     return "\n".join(lines)
 
 
@@ -262,7 +262,7 @@ def _build_html(
                 </div>
                 {location_block}
                 {notes_block}
-                <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Optiminastic × Circle HR Team</p>
+                <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Optiminastic HR Team</p>
               </td>
             </tr>
           </table>
@@ -345,7 +345,7 @@ def _test_email_body_html(
         return f"""
           <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
           <p style="margin:0 0 14px;font-size:13.5px;color:#444;line-height:1.55;">
-            Please find your <strong>offer letter for the {pos} role</strong> at Optiminastic × Circle.
+            Please find your <strong>offer letter for the {pos} role</strong> at Optiminastic.
             We&apos;re excited about the prospect of you joining us.
           </p>
           <div style="margin:0 0 16px;padding:14px 16px;background:#f4f5f7;border-radius:10px;">
@@ -382,7 +382,7 @@ def _test_email_body_html(
           <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
           <p style="margin:0 0 14px;font-size:13.5px;color:#444;line-height:1.55;">
             We&apos;re delighted to share your <strong>letter of appointment</strong> for the
-            <strong>{pos} role</strong> at Optiminastic × Circle. This confirms your appointment and
+            <strong>{pos} role</strong> at Optiminastic. This confirms your appointment and
             the terms discussed during your onboarding.
           </p>
           <div style="margin:0 0 16px;padding:14px 16px;background:#f4f5f7;border-radius:10px;">
@@ -432,7 +432,7 @@ def _test_email_body_html(
           <p style="margin:0 0 14px;font-size:13.5px;color:#444;line-height:1.55;">
             Great news — after your interview, you&apos;ve been
             <strong style="color:#0a7d4f;">shortlisted for the {pos} role</strong> at
-            Optiminastic × Circle! ✨ The panel was impressed, and you&apos;re among the final
+            Optiminastic! ✨ The panel was impressed, and you&apos;re among the final
             candidates being considered.
           </p>
           <p style="margin:0 0 16px;font-size:13.5px;color:#444;line-height:1.55;">
@@ -456,7 +456,7 @@ def _test_email_body_html(
           <p style="margin:0 0 14px;font-size:13.5px;color:#444;line-height:1.55;">
             We&apos;re delighted to let you know that you&apos;ve been
             <strong style="color:#0a7d4f;">selected for the {pos} role</strong> at
-            Optiminastic × Circle! 🎉
+            Optiminastic! 🎉
           </p>
           <p style="margin:0 0 16px;font-size:13.5px;color:#444;line-height:1.55;">
             To move forward, please <strong>confirm your availability to join</strong> — just reply
@@ -619,7 +619,7 @@ def _wrap_branded(inner: str) -> str:
             <tr>
               <td style="padding:22px 28px 28px;">
                 {inner}
-                <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Optiminastic × Circle HR Team</p>
+                <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Optiminastic HR Team</p>
               </td>
             </tr>
           </table>
@@ -660,7 +660,7 @@ def send_test_email(
             f"{test_email_subject(template, position)}.\n"
             + (f"Test link: {test_url}\n" if test_url else "")
             + (f"Score: {score}\n" if score else "")
-            + "\n— The Optiminastic × Circle HR Team"
+            + "\n— The Optiminastic HR Team"
         )
 
         msg = EmailMessage()
@@ -756,7 +756,7 @@ def _build_ics(
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//Circle by Optiminastic//Interview//EN",
+        "PRODID:-//Optiminastic//Interview//EN",
         "CALSCALE:GREGORIAN",
         "METHOD:REQUEST",
         "BEGIN:VEVENT",

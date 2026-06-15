@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""  # login username (Gmail address, or literally "apikey")
     smtp_password: str = ""  # Gmail app password, or the provider API key
     smtp_from_email: str = ""  # verified sender; falls back to smtp_user (Gmail)
-    smtp_from_name: str = "Optiminastic × Circle HR Team"
+    smtp_from_name: str = "Optiminastic HR Team"
     # SendGrid HTTP API (used INSTEAD of SMTP when set — required on hosts that
     # block outbound SMTP, e.g. Render free tier). Send over HTTPS, no SMTP ports.
     # Requires a verified sender/domain in SendGrid and SMTP_FROM_EMAIL set to it.
