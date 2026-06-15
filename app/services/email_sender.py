@@ -21,6 +21,13 @@ from zoneinfo import ZoneInfo
 from app.core.config import Settings
 from app.core.logging import get_logger
 
+
+def _brand_header() -> str:
+    """Email header: the Optiminastic logo (hosted), shown large."""
+    return """              <td style="padding:22px 28px 16px;">
+                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="72" style="height:72px;width:auto;vertical-align:middle;border:0;" />
+              </td>"""
+
 logger = get_logger("curcle.email")
 
 # How long to wait for an SMTP/HTTP connection before giving up.
@@ -246,9 +253,7 @@ def _build_html(
           <table role="presentation" width="560" cellpadding="0" cellspacing="0"
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
-              <td style="padding:22px 28px 16px;">
-                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="72" style="height:72px;width:auto;vertical-align:middle;border:0;" />
-              </td>
+{_brand_header()}
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
             <tr>
@@ -611,9 +616,7 @@ def _wrap_branded(inner: str) -> str:
           <table role="presentation" width="560" cellpadding="0" cellspacing="0"
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
-              <td style="padding:22px 28px 16px;">
-                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="72" style="height:72px;width:auto;vertical-align:middle;border:0;" />
-              </td>
+{_brand_header()}
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
             <tr>
@@ -690,9 +693,7 @@ def _wrap_custom(inner: str) -> str:
           <table role="presentation" width="560" cellpadding="0" cellspacing="0"
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
-              <td style="padding:22px 28px 16px;">
-                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="72" style="height:72px;width:auto;vertical-align:middle;border:0;" />
-              </td>
+{_brand_header()}
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
             <tr>
