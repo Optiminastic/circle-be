@@ -75,6 +75,17 @@ async def upload_request_document(
     if required and docType not in required:
         raise ValidationError(f"'{docType}' is not a requested document for this link.")
 
+    # A verified document is locked — HR has approved it, so it can never be
+    # overwritten (even via a fresh link that carried the approval forward).
+    existing = next(
+        (s for s in (request.get("submissions") or []) if s.get("docType") == docType),
+        None,
+    )
+    if existing and existing.get("status") == "Verified":
+        raise ValidationError(
+            "This document has already been verified and locked. It can no longer be replaced."
+        )
+
     data = await file.read()
     if not data:
         raise ValidationError("Empty file.")
