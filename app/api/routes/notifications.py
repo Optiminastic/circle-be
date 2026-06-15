@@ -58,6 +58,7 @@ class TestEmailIn(BaseModel):
     score: str | None = None
     durationMin: int | None = None
     dateTimeIso: str | None = None
+    salary: str | None = None
 
 
 @router.post("/test-email")
@@ -80,6 +81,7 @@ def test_email(
         score=payload.score,
         duration_min=payload.durationMin,
         date_time_iso=payload.dateTimeIso,
+        salary=payload.salary,
     )
     return {"sent": sent} if sent else {"sent": False, "reason": "send_failed"}
 

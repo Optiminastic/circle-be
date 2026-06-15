@@ -310,10 +310,13 @@ def test_email_subject(template: str, position: str | None = None) -> str:
         "doc_request": "Action needed — upload your onboarding documents (link valid 24 hours)",
         "offer_shortlisted": "Great news — you've been shortlisted at Optiminastic ✨",
         "offer_selected": "Congratulations — you're selected at Optiminastic 🎉",
+        "job_offer": "Your job offer from Optiminastic",
         "offer_letter": "Your offer letter from Optiminastic — please review & sign",
         "office_invite": "You're invited to our office — Optiminastic",
         "appointment_letter": "Your letter of appointment — Optiminastic",
     }
+    if template == "job_offer" and position:
+        return f"Your job offer — {position} at Optiminastic"
     if template == "offer_letter" and position:
         return f"Your offer letter for {position} at Optiminastic — please review & sign"
     if template == "appointment_letter" and position:
@@ -339,6 +342,7 @@ def _test_email_body_html(
     score: str | None,
     duration_min: int | None,
     when_ist: str | None,
+    salary: str | None = None,
 ) -> str:
     """Inner HTML for each pipeline template (greeting/footer added by caller)."""
     name = html.escape(candidate_name)
@@ -346,17 +350,45 @@ def _test_email_body_html(
     url = html.escape(test_url or "#", quote=True)
     dur = duration_min or 60
 
+    if template == "job_offer":
+        join_line = (
+            f"Please confirm if you can join us from <strong>{when_ist}</strong>."
+            if when_ist
+            else "Please confirm your availability to join us."
+        )
+        salary_row = html.escape(salary) if salary else "As discussed during the process"
+        return f"""
+          <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Dear {name},</p>
+          <p style="margin:0 0 16px;font-size:13.5px;color:#444;line-height:1.6;">
+            We are pleased to offer you the position of <strong>{pos}</strong> at
+            <strong>Optiminastic, Mumbai</strong>. {join_line}
+          </p>
+          <div style="margin:0 0 16px;padding:16px 18px;background:#f4f5f7;border-radius:10px;">
+            <p style="margin:0 0 10px;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:0.4px;color:#9aa0a6;">The details are as follows</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:13px;color:#111827;">
+              <tr><td style="padding:3px 0;color:#6b7280;width:140px;">Job Title</td><td style="padding:3px 0;font-weight:bold;">{pos}</td></tr>
+              <tr><td style="padding:3px 0;color:#6b7280;">Salary</td><td style="padding:3px 0;font-weight:bold;">{salary_row}</td></tr>
+              <tr><td style="padding:3px 0;color:#6b7280;">Working Days</td><td style="padding:3px 0;">Monday to Friday</td></tr>
+              <tr><td style="padding:3px 0;color:#6b7280;">Working Hours</td><td style="padding:3px 0;">10:00 AM to 7:00 PM <span style="color:#6b7280;">(flexible check-in between 9:00 AM and 11:00 AM)</span></td></tr>
+              <tr><td style="padding:3px 0;color:#6b7280;">Mode</td><td style="padding:3px 0;">On site</td></tr>
+            </table>
+          </div>
+          <p style="margin:0;font-size:13px;color:#444;line-height:1.55;">
+            Your formal offer letter will follow shortly. We look forward to having you on our team.
+          </p>
+        """
+
     if template == "offer_letter":
         return f"""
-          <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Hi {name},</p>
+          <p style="margin:0 0 14px;font-size:15px;color:#1a1a1a;">Dear {name},</p>
           <p style="margin:0 0 14px;font-size:13.5px;color:#444;line-height:1.55;">
             Please find your <strong>offer letter for the {pos} role</strong> at Optiminastic.
-            We&apos;re excited about the prospect of you joining us.
+            It confirms the terms of your offer in full.
           </p>
           <div style="margin:0 0 16px;padding:14px 16px;background:#f4f5f7;border-radius:10px;">
             <p style="margin:0;font-size:13px;color:#111827;">
-              <strong>Next step:</strong> review the offer, and if everything looks good,
-              <strong>sign it and send the signed copy back</strong> by replying to this email.
+              <strong>Next step:</strong> review the letter, and if everything looks good,
+              <strong>sign it and reply with the signed copy</strong>.
             </p>
           </div>
           <p style="margin:0;font-size:13px;color:#444;line-height:1.55;">
@@ -644,6 +676,7 @@ def send_test_email(
     score: str | None = None,
     duration_min: int | None = None,
     date_time_iso: str | None = None,
+    salary: str | None = None,
 ) -> bool:
     """Send one of the test-pipeline emails. Logs failures, never raises."""
     try:
@@ -657,6 +690,7 @@ def send_test_email(
             score=score,
             duration_min=duration_min,
             when_ist=when_ist,
+            salary=salary,
         )
         text_fallback = (
             f"Hi {candidate_name},\n\n"
