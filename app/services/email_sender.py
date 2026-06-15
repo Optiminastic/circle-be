@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import html
 import json
+import re
 import smtplib
 import urllib.error
 import urllib.request
@@ -246,9 +247,10 @@ def _build_html(
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
               <td style="padding:22px 28px 16px;">
+                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="24" style="height:24px;width:auto;vertical-align:middle;border:0;" />
+                <span style="vertical-align:middle;margin:0 9px;font-size:14px;color:#9aa0a6;">×</span>
                 <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
                 <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
-                <span style="vertical-align:middle;margin-left:5px;font-size:12px;color:#9aa0a6;">by Optiminastic</span>
               </td>
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
@@ -264,13 +266,6 @@ def _build_html(
                 {location_block}
                 {notes_block}
                 <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Optiminastic × Circle HR Team</p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:16px 28px;background:#fafbfc;border-top:1px solid #eceef1;">
-                <p style="margin:0;font-size:11px;color:#9aa0a6;line-height:1.6;">
-                  Circle by Optiminastic — Talent &amp; HR · This is an automated message; reply any time if you have questions.
-                </p>
               </td>
             </tr>
           </table>
@@ -620,9 +615,10 @@ def _wrap_branded(inner: str) -> str:
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
               <td style="padding:22px 28px 16px;">
+                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="24" style="height:24px;width:auto;vertical-align:middle;border:0;" />
+                <span style="vertical-align:middle;margin:0 9px;font-size:14px;color:#9aa0a6;">×</span>
                 <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
                 <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
-                <span style="vertical-align:middle;margin-left:5px;font-size:12px;color:#9aa0a6;">by Optiminastic</span>
               </td>
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
@@ -630,13 +626,6 @@ def _wrap_branded(inner: str) -> str:
               <td style="padding:22px 28px 28px;">
                 {inner}
                 <p style="margin:26px 0 0;font-size:12px;color:#999;">— The Optiminastic × Circle HR Team</p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:16px 28px;background:#fafbfc;border-top:1px solid #eceef1;">
-                <p style="margin:0;font-size:11px;color:#9aa0a6;line-height:1.6;">
-                  Circle by Optiminastic — Talent &amp; HR · This is an automated message; reply any time if you have questions.
-                </p>
               </td>
             </tr>
           </table>
@@ -708,22 +697,16 @@ def _wrap_custom(inner: str) -> str:
                  style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6e8ec;box-shadow:0 1px 3px rgba(17,24,39,0.04);">
             <tr>
               <td style="padding:22px 28px 16px;">
+                <img src="https://res.cloudinary.com/dui7h1n3d/image/upload/q_auto/f_auto/v1781496355/optiminastic-logo_baso6m.png" alt="optiminastic logo" height="24" style="height:24px;width:auto;vertical-align:middle;border:0;" />
+                <span style="vertical-align:middle;margin:0 9px;font-size:14px;color:#9aa0a6;">×</span>
                 <span style="display:inline-block;width:24px;height:24px;border-radius:7px;background:#d11453;color:#ffffff;text-align:center;line-height:24px;font-weight:bold;font-size:14px;vertical-align:middle;">C</span>
                 <span style="vertical-align:middle;margin-left:9px;font-size:16px;font-weight:bold;color:#111827;letter-spacing:0.2px;">Circle</span>
-                <span style="vertical-align:middle;margin-left:5px;font-size:12px;color:#9aa0a6;">by Optiminastic</span>
               </td>
             </tr>
             <tr><td style="padding:0 28px;"><div style="height:1px;background:#eceef1;line-height:1px;font-size:0;">&nbsp;</div></td></tr>
             <tr>
               <td style="padding:22px 28px 28px;font-size:13.5px;color:#1a1a1a;line-height:1.6;">
                 {inner}
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:16px 28px;background:#fafbfc;border-top:1px solid #eceef1;">
-                <p style="margin:0;font-size:11px;color:#9aa0a6;line-height:1.6;">
-                  Circle by Optiminastic — Talent &amp; HR · This is an automated message; reply any time if you have questions.
-                </p>
               </td>
             </tr>
           </table>
@@ -806,6 +789,36 @@ def _build_ics(
     return "\r\n".join(lines) + "\r\n"
 
 
+# Inline link token: ``[[Label|https://url]]`` -> a clickable anchor in the
+# email body. Lets HR-composed bodies show a labelled link (e.g. "View map")
+# instead of pasting a raw URL.
+_INLINE_LINK_RE = re.compile(r"\[\[([^\]|]+)\|([^\]]+)\]\]")
+
+
+def _render_body_html(body: str) -> str:
+    """HTML-escape a plain-text body, turning ``[[Label|url]]`` tokens into
+    anchors. Escaping is done per-segment so the token URL/label aren't
+    double-escaped."""
+    parts: list[str] = []
+    last = 0
+    for m in _INLINE_LINK_RE.finditer(body):
+        parts.append(html.escape(body[last : m.start()]))
+        label = html.escape(m.group(1).strip())
+        url = html.escape(m.group(2).strip(), quote=True)
+        parts.append(
+            f'<a href="{url}" style="color:#9a1f33;font-weight:bold;'
+            f'text-decoration:underline;">{label}</a>'
+        )
+        last = m.end()
+    parts.append(html.escape(body[last:]))
+    return "".join(parts).replace("\n", "<br/>")
+
+
+def _strip_link_tokens(body: str) -> str:
+    """Plain-text fallback form of ``[[Label|url]]`` -> ``Label: url``."""
+    return _INLINE_LINK_RE.sub(lambda m: f"{m.group(1).strip()}: {m.group(2).strip()}", body)
+
+
 def send_custom_email(
     settings: Settings,
     to: str,
@@ -830,8 +843,8 @@ def send_custom_email(
     `links` are rendered as labelled buttons (HTML) / "Label: url" (plain text).
     Logs failures, never raises (runs inside a BackgroundTask)."""
     try:
-        inner = html.escape(body).replace("\n", "<br/>")
-        text_body = body
+        inner = _render_body_html(body)
+        text_body = _strip_link_tokens(body)
 
         valid_links = [l for l in (links or []) if l.get("url") and l.get("label")]
         if valid_links:
