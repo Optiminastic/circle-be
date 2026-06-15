@@ -1,0 +1,10 @@
+# Render Blueprint for the Circle backend (FastAPI + uvicorn).
+# The start command MUST bind 0.0.0.0 on Render's $PORT, otherwise Render's
+# port scan fails with "No open ports detected on 0.0.0.0".
+services:
+  - type: web
+    name: circle-be
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT

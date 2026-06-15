@@ -89,3 +89,17 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+if __name__ == "__main__":
+    # Production entrypoint (e.g. Render): bind 0.0.0.0 on the platform-provided
+    # $PORT so the host can detect the open port. Locally falls back to 8000.
+    import os
+
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",  # noqa: S104 - must bind all interfaces for the platform health check
+        port=int(os.environ.get("PORT", "8000")),
+    )
