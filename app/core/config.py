@@ -55,7 +55,9 @@ class Settings(BaseSettings):
     smtp_password: str = ""  # Gmail app password, or the provider API key
     smtp_from_email: str = ""  # verified sender; falls back to smtp_user (Gmail)
     smtp_from_name: str = "Optiminastic HR Team"
-    smtp_reply_to: str = ""  # optional Reply-To (e.g. hr@optiminastic.com)
+    # Where candidate replies should land (Reply-To header). Falls back to the
+    # From address when unset.
+    smtp_reply_to: str = "hr@optiminastic.com"
     # Resend HTTP API key (used INSTEAD of SMTP when set — Render free tier blocks
     # outbound SMTP). Auto-derived from the Resend SMTP password if not set.
     resend_api_key: str = ""
