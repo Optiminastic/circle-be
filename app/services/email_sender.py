@@ -222,7 +222,10 @@ def _deliver(settings: Settings, msg: EmailMessage, to_addrs: list[str] | None =
     with smtp:
         if settings.smtp_port != 465:
             smtp.starttls()
-        smtp.login(settings.smtp_user, settings.smtp_password)
+        # Google app passwords are displayed in 4 space-separated groups but must
+        # be sent without the spaces — strip whitespace so a pasted-as-shown
+        # password still authenticates.
+        smtp.login(settings.smtp_user, settings.smtp_password.replace(" ", ""))
         if to_addrs is not None:
             smtp.send_message(msg, to_addrs=to_addrs)
         else:
