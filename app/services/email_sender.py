@@ -34,6 +34,9 @@ logger = get_logger("curcle.email")
 _SMTP_TIMEOUT = 20
 _SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send"
 _RESEND_URL = "https://api.resend.com/emails"
+# Cloudflare (in front of api.resend.com) blocks the default "Python-urllib"
+# agent with error 1010 — every HTTP-API call sends this normal UA instead.
+_HTTP_USER_AGENT = "Mozilla/5.0 (compatible; CurcleBackend/1.0; +https://optiminastic.com)"
 
 
 def _addr_list(msg: EmailMessage, header: str) -> list[dict[str, str]]:
@@ -101,6 +104,9 @@ def _deliver_resend(settings: Settings, msg: EmailMessage) -> None:
         headers={
             "Authorization": f"Bearer {settings.resend_key}",
             "Content-Type": "application/json",
+            # Cloudflare (in front of api.resend.com) blocks the default
+            # "Python-urllib" agent with error 1010 — send a normal UA.
+            "User-Agent": _HTTP_USER_AGENT,
         },
         method="POST",
     )
@@ -179,6 +185,7 @@ def _deliver_sendgrid(settings: Settings, msg: EmailMessage) -> None:
         headers={
             "Authorization": f"Bearer {settings.sendgrid_key}",
             "Content-Type": "application/json",
+            "User-Agent": _HTTP_USER_AGENT,
         },
         method="POST",
     )
