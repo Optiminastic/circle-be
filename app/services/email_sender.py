@@ -703,6 +703,8 @@ def send_test_email(
         msg = EmailMessage()
         msg["Subject"] = test_email_subject(template, position)
         msg["From"] = f"{settings.smtp_from_name} <{settings.from_address}>"
+        if settings.smtp_reply_to.strip():
+            msg["Reply-To"] = settings.smtp_reply_to.strip()
         msg["To"] = to
         msg.set_content(text_fallback)
         msg.add_alternative(_wrap_branded(inner), subtype="html")
@@ -889,6 +891,8 @@ def send_custom_email(
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = f"{settings.smtp_from_name} <{settings.from_address}>"
+        if settings.smtp_reply_to.strip():
+            msg["Reply-To"] = settings.smtp_reply_to.strip()
         msg["To"] = to
         if cc:
             msg["Cc"] = ", ".join(c.strip() for c in cc if c.strip())
@@ -937,6 +941,8 @@ def send_schedule_email(
         msg = EmailMessage()
         msg["Subject"] = subject_for(schedule_type)
         msg["From"] = f"{settings.smtp_from_name} <{settings.from_address}>"
+        if settings.smtp_reply_to.strip():
+            msg["Reply-To"] = settings.smtp_reply_to.strip()
         msg["To"] = to
         msg.set_content(
             _build_text(
