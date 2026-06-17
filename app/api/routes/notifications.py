@@ -95,7 +95,6 @@ class CustomEmailIn(BaseModel):
     to: str
     subject: str
     body: str
-    cc: list[str] | None = None
     # Optional calendar invite (.ics, METHOD:REQUEST) attached when eventStartIso is set.
     eventStartIso: str | None = None
     eventDurationMin: int = 45
@@ -132,7 +131,6 @@ def custom_email(
         to=payload.to.strip(),
         subject=payload.subject,
         body=payload.body,
-        cc=payload.cc,
         event_start_iso=payload.eventStartIso,
         event_duration_min=payload.eventDurationMin,
         event_summary=payload.eventSummary,

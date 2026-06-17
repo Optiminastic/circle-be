@@ -941,7 +941,6 @@ def send_custom_email(
     to: str,
     subject: str,
     body: str,
-    cc: list[str] | None = None,
     *,
     event_start_iso: str | None = None,
     event_duration_min: int = 45,
@@ -975,16 +974,12 @@ def send_custom_email(
             inner += f'<div style="margin-top:18px;">{buttons}</div>'
             text_body += "\n\n" + "\n".join(f'{l["label"]}: {l["url"]}' for l in valid_links)
 
-        recipients = [to] + [c for c in (cc or []) if c.strip()]
-
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = f"{settings.smtp_from_name} <{settings.from_address}>"
         if settings.smtp_reply_to.strip():
             msg["Reply-To"] = settings.smtp_reply_to.strip()
         msg["To"] = to
-        if cc:
-            msg["Cc"] = ", ".join(c.strip() for c in cc if c.strip())
         msg.set_content(text_body)
         msg.add_alternative(_wrap_custom(inner), subtype="html")
 
@@ -1008,7 +1003,7 @@ def send_custom_email(
                 params={"method": "REQUEST", "name": "invite.ics"},
             )
 
-        _deliver(settings, msg, to_addrs=recipients)
+        _deliver(settings, msg)
         logger.info("Custom email sent to %s.", to)
         return True
     except Exception:  # noqa: BLE001 - never propagate; report failure to caller
