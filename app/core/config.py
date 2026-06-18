@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     # Requires a verified sender/domain in SendGrid and SMTP_FROM_EMAIL set to it.
     sendgrid_api_key: str = ""
 
+    # Anti-spam rate limiting for the PUBLIC, unauthenticated writes (job
+    # application: candidate create + resume upload). Limits are per client IP.
+    # The HR app origin and local/LAN origins are exempt (see rate_limit.py), so
+    # only the public careers traffic (and direct API abuse) is throttled.
+    rate_limit_enabled: bool = True
+    public_rate_limit_per_minute: int = 6  # ~3 applications/min/IP (2 calls each)
+    public_rate_limit_per_hour: int = 30  # ~15 applications/hour/IP
+    # The HR dashboard origin — requests from here are never rate-limited.
+    hr_app_origin: str = "https://circle.optiminastic.com"
+
     # Office location for offline rounds (IQ Test / Assessment / Interview).
     office_address: str = "Optiminastic Office (set OFFICE_ADDRESS in .env)"
     office_maps_url: str = "https://maps.google.com/?q=Optiminastic"

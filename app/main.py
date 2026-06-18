@@ -9,14 +9,16 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 
-from app.api.routes import calendar, doc_requests, documents, meta, notifications, resources
+from app.api.routes import calendar, doc_requests, documents, meta, notifications, public, resources
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
+from app.core.rate_limit import SlidingWindowRateLimiter, client_ip, is_exempt_origin
 from app.db.database import Database
 from app.domain.registry import all_tables
 from app.storage.s3_storage import S3FileStorage
@@ -56,6 +58,38 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # --- Anti-spam: per-IP rate limit on the PUBLIC, unauthenticated writes ----
+    # The careers form lets anyone create a candidate + upload a resume; throttle
+    # those by client IP so the openings can't be spammed. Registered BEFORE CORS
+    # below so the CORS middleware (added last = outermost) still attaches headers
+    # to the 429, letting the browser read the message. HR + local origins exempt.
+    public_write_limiter = SlidingWindowRateLimiter(
+        [
+            (settings.public_rate_limit_per_minute, 60.0),
+            (settings.public_rate_limit_per_hour, 3600.0),
+        ]
+    )
+    public_write_paths = {"/api/public/apply", "/api/candidates", "/api/documents"}
+
+    @app.middleware("http")
+    async def rate_limit_public_writes(request: Request, call_next):
+        if (
+            settings.rate_limit_enabled
+            and request.method == "POST"
+            and request.url.path in public_write_paths
+            and not is_exempt_origin(request.headers.get("origin", ""), settings)
+            and not public_write_limiter.allow(client_ip(request))
+        ):
+            logger.warning(
+                "Rate limit hit: ip=%s path=%s", client_ip(request), request.url.path
+            )
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please wait a minute and try again."},
+                headers={"Retry-After": "60"},
+            )
+        return await call_next(request)
+
     # Compress large list payloads — JSONB resource lists shrink ~5-10x.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
@@ -84,6 +118,9 @@ def create_app() -> FastAPI:
     app.include_router(doc_requests.router)
     app.include_router(notifications.router)
     app.include_router(calendar.router)
+    # Hardened public router must precede the generic resources router so its
+    # literal /api/public/* paths win over "/api/{resource}".
+    app.include_router(public.router)
     app.include_router(resources.router)
     return app
 
