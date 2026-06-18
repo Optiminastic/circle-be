@@ -33,11 +33,89 @@ logger = get_logger("curcle.email")
 # How long to wait for an SMTP/HTTP connection before giving up.
 _SMTP_TIMEOUT = 20
 _SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send"
+_RESEND_URL = "https://api.resend.com/emails"
+# Cloudflare (in front of api.resend.com) blocks the default "Python-urllib"
+# agent with error 1010 — every HTTP-API call sends this normal UA instead.
+_HTTP_USER_AGENT = "Mozilla/5.0 (compatible; CurcleBackend/1.0; +https://optiminastic.com)"
 
 
 def _addr_list(msg: EmailMessage, header: str) -> list[dict[str, str]]:
     raw = msg.get(header) or ""
     return [{"email": a.strip()} for a in raw.split(",") if a.strip()]
+
+
+def _deliver_resend(settings: Settings, msg: EmailMessage) -> None:
+    """Send via Resend's HTTPS API (works where outbound SMTP is blocked, e.g.
+    Render's free tier). Extracts the text/HTML parts + attachments from the
+    already-built EmailMessage. Raises on failure; callers log and swallow."""
+    text_value, html_value = "", ""
+    attachments: list[dict[str, str]] = []
+    for part in msg.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        if part.get_content_disposition() == "attachment":
+            payload = part.get_payload(decode=True) or b""
+            attachments.append(
+                {
+                    "filename": part.get_filename() or "attachment",
+                    "content": base64.b64encode(payload).decode("ascii"),
+                }
+            )
+        elif part.get_content_type() == "text/plain" and not text_value:
+            text_value = part.get_content()
+        elif part.get_content_type() == "text/html" and not html_value:
+            html_value = part.get_content()
+
+    # Unique recipients (Resend rejects duplicates across to/cc).
+    seen: set[str] = set()
+    to_list: list[str] = []
+    for a in _addr_list(msg, "To"):
+        key = a["email"].lower()
+        if key and key not in seen:
+            seen.add(key)
+            to_list.append(a["email"])
+    cc_list: list[str] = []
+    for a in _addr_list(msg, "Cc"):
+        key = a["email"].lower()
+        if key and key not in seen:
+            seen.add(key)
+            cc_list.append(a["email"])
+
+    from_email = settings.from_address
+    from_field = f"{settings.smtp_from_name} <{from_email}>" if settings.smtp_from_name else from_email
+
+    body: dict[str, object] = {"from": from_field, "to": to_list, "subject": msg.get("Subject") or ""}
+    if cc_list:
+        body["cc"] = cc_list
+    if settings.smtp_reply_to:
+        body["reply_to"] = settings.smtp_reply_to
+    if html_value:
+        body["html"] = html_value
+    if text_value:
+        body["text"] = text_value
+    if not html_value and not text_value:
+        body["text"] = ""
+    if attachments:
+        body["attachments"] = attachments
+
+    req = urllib.request.Request(
+        _RESEND_URL,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {settings.resend_key}",
+            "Content-Type": "application/json",
+            # Cloudflare (in front of api.resend.com) blocks the default
+            # "Python-urllib" agent with error 1010 — send a normal UA.
+            "User-Agent": _HTTP_USER_AGENT,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_SMTP_TIMEOUT):  # noqa: S310 (fixed host)
+            return  # 200 OK
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:500]
+        raise RuntimeError(f"Resend {exc.code}: {detail}") from exc
 
 
 def _deliver_sendgrid(settings: Settings, msg: EmailMessage) -> None:
@@ -107,6 +185,7 @@ def _deliver_sendgrid(settings: Settings, msg: EmailMessage) -> None:
         headers={
             "Authorization": f"Bearer {settings.sendgrid_key}",
             "Content-Type": "application/json",
+            "User-Agent": _HTTP_USER_AGENT,
         },
         method="POST",
     )
@@ -121,10 +200,17 @@ def _deliver_sendgrid(settings: Settings, msg: EmailMessage) -> None:
 def _deliver(settings: Settings, msg: EmailMessage, to_addrs: list[str] | None = None) -> None:
     """Send one message via the configured transport.
 
-    Prefers the SendGrid HTTP API when SENDGRID_API_KEY is set (works on networks
-    that block SMTP). Otherwise uses SMTP — implicit TLS (SMTP_SSL) on port 465,
-    STARTTLS elsewhere. Raises on failure; callers log and swallow.
+    Prefers an HTTP API (Resend, then SendGrid) when configured — these work on
+    networks that block outbound SMTP (e.g. Render's free tier). Otherwise uses
+    SMTP — implicit TLS (SMTP_SSL) on port 465, STARTTLS elsewhere. Raises on
+    failure; callers log and swallow.
     """
+    if settings.smtp_reply_to and "Reply-To" not in msg:
+        msg["Reply-To"] = settings.smtp_reply_to
+
+    if settings.resend_key:
+        _deliver_resend(settings, msg)
+        return
     if settings.sendgrid_key:
         _deliver_sendgrid(settings, msg)
         return
@@ -136,7 +222,10 @@ def _deliver(settings: Settings, msg: EmailMessage, to_addrs: list[str] | None =
     with smtp:
         if settings.smtp_port != 465:
             smtp.starttls()
-        smtp.login(settings.smtp_user, settings.smtp_password)
+        # Google app passwords are displayed in 4 space-separated groups but must
+        # be sent without the spaces — strip whitespace so a pasted-as-shown
+        # password still authenticates.
+        smtp.login(settings.smtp_user, settings.smtp_password.replace(" ", ""))
         if to_addrs is not None:
             smtp.send_message(msg, to_addrs=to_addrs)
         else:
@@ -852,7 +941,6 @@ def send_custom_email(
     to: str,
     subject: str,
     body: str,
-    cc: list[str] | None = None,
     *,
     event_start_iso: str | None = None,
     event_duration_min: int = 45,
@@ -886,16 +974,12 @@ def send_custom_email(
             inner += f'<div style="margin-top:18px;">{buttons}</div>'
             text_body += "\n\n" + "\n".join(f'{l["label"]}: {l["url"]}' for l in valid_links)
 
-        recipients = [to] + [c for c in (cc or []) if c.strip()]
-
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = f"{settings.smtp_from_name} <{settings.from_address}>"
         if settings.smtp_reply_to.strip():
             msg["Reply-To"] = settings.smtp_reply_to.strip()
         msg["To"] = to
-        if cc:
-            msg["Cc"] = ", ".join(c.strip() for c in cc if c.strip())
         msg.set_content(text_body)
         msg.add_alternative(_wrap_custom(inner), subtype="html")
 
@@ -919,7 +1003,7 @@ def send_custom_email(
                 params={"method": "REQUEST", "name": "invite.ics"},
             )
 
-        _deliver(settings, msg, to_addrs=recipients)
+        _deliver(settings, msg)
         logger.info("Custom email sent to %s.", to)
         return True
     except Exception:  # noqa: BLE001 - never propagate; report failure to caller

@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Where candidate replies should land (Reply-To header). Falls back to the
     # From address when unset.
     smtp_reply_to: str = "hr@optiminastic.com"
+    # Resend HTTP API key (used INSTEAD of SMTP when set — Render free tier blocks
+    # outbound SMTP). Auto-derived from the Resend SMTP password if not set.
+    resend_api_key: str = ""
     # SendGrid HTTP API (used INSTEAD of SMTP when set — required on hosts that
     # block outbound SMTP, e.g. Render free tier). Send over HTTPS, no SMTP ports.
     # Requires a verified sender/domain in SendGrid and SMTP_FROM_EMAIL set to it.
@@ -131,9 +134,24 @@ class Settings(BaseSettings):
         return ""
 
     @property
+    def resend_key(self) -> str:
+        """The Resend API key for the HTTPS transport.
+
+        Uses RESEND_API_KEY if set, otherwise reuses the SMTP password when the
+        SMTP config points at Resend (host smtp.resend.com, user 'resend'). Lets
+        an existing Resend-over-SMTP setup switch to the API automatically on
+        hosts that block SMTP (e.g. Render) — no new env var needed.
+        """
+        if self.resend_api_key:
+            return self.resend_api_key
+        if "resend" in self.smtp_host.lower() and self.smtp_user.lower() == "resend":
+            return self.smtp_password
+        return ""
+
+    @property
     def has_smtp(self) -> bool:
-        # True when ANY email transport is configured (SendGrid HTTP or SMTP).
-        return bool(self.sendgrid_key or (self.smtp_user and self.smtp_password))
+        # True when ANY email transport is configured (Resend/SendGrid HTTP or SMTP).
+        return bool(self.resend_key or self.sendgrid_key or (self.smtp_user and self.smtp_password))
 
     @property
     def from_address(self) -> str:
