@@ -70,43 +70,24 @@ def create_app() -> FastAPI:
         ]
     )
     public_write_paths = {"/api/public/apply", "/api/candidates", "/api/documents"}
-    # The OTP / email-check endpoints get their own (looser) per-IP budget — a
-    # single applicant makes a few calls (check + request + verify [+ resend]).
-    # This caps an IP from spamming codes to many different emails; the per-EMAIL
-    # cap (public.py) caps bombing one address. Both hold for ANY caller — website,
-    # server action, or a replayed cURL — so abuse can't bypass it via the client.
-    otp_limiter = SlidingWindowRateLimiter(
-        [
-            (settings.otp_rate_limit_per_minute, 60.0),
-            (settings.otp_rate_limit_per_hour, 3600.0),
-        ]
-    )
-    otp_paths = {
-        "/api/public/otp/request",
-        "/api/public/otp/verify",
-        "/api/public/check-applied",
-    }
+    # NOTE: the OTP / email-check endpoints are intentionally NOT per-IP rate
+    # limited. Many candidates can legitimately request a code at the same time —
+    # from a shared office/college network, or all via the careers server's single
+    # egress IP — and a per-IP cap would wrongly throttle that burst. OTP abuse is
+    # bounded PER-EMAIL instead (a cap + resend cooldown in public.py), which never
+    # blocks a different candidate's email.
     # Only the HR-app write paths honour the trusted-origin exemption (so staff
-    # aren't throttled). The PUBLIC careers paths (apply + OTP/check) are NEVER
-    # exempt: they have no login, and a direct or copied-from-DevTools cURL can
-    # spoof the Origin header — so they must always be throttled by client IP.
+    # aren't throttled); the public apply path is always throttled per IP.
     hr_write_paths = {"/api/candidates", "/api/documents"}
 
     @app.middleware("http")
     async def rate_limit_public_writes(request: Request, call_next):
         path = request.url.path
-        if settings.rate_limit_enabled and request.method == "POST":
-            limiter = (
-                public_write_limiter
-                if path in public_write_paths
-                else otp_limiter
-                if path in otp_paths
-                else None
-            )
+        if settings.rate_limit_enabled and request.method == "POST" and path in public_write_paths:
             exempt = path in hr_write_paths and is_exempt_origin(
                 request.headers.get("origin", ""), settings
             )
-            if limiter is not None and not exempt and not limiter.allow(client_ip(request)):
+            if not exempt and not public_write_limiter.allow(client_ip(request)):
                 logger.warning("Rate limit hit: ip=%s path=%s", client_ip(request), path)
                 return JSONResponse(
                     status_code=429,
