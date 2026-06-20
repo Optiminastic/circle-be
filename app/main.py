@@ -35,7 +35,7 @@ def create_app() -> FastAPI:
         database = Database(settings)
         database.connect()
         if settings.auto_create_tables:
-            database.ensure_tables([*all_tables(), "documents"])
+            database.ensure_tables([*all_tables(), "documents", "email_otps"])
         app.state.database = database
 
         if settings.has_storage:

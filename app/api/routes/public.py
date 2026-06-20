@@ -23,10 +23,10 @@ import json
 import re
 import secrets
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, ValidationError as PydanticValidationError, field_validator
 
 from app.api.dependencies import get_repository, get_storage
@@ -34,6 +34,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import ValidationError
 from app.core.logging import get_logger
 from app.repositories.base import DocumentRepository
+from app.services.email_sender import send_application_received, send_otp_email
 from app.services.screening import build_answers, compute_fit
 from app.storage.base import FileStorage
 
@@ -59,6 +60,148 @@ def _clean(value: str) -> str:
     HR dashboard (defence in depth — React already escapes) or HTML emails.
     """
     return _CONTROL.sub("", value).replace("<", "").replace(">", "").strip()
+
+
+# ── Email OTP verification ──────────────────────────────────────────────────
+# Applicants must prove they own the email before they can apply. A 4-digit code
+# is emailed and checked against a short-lived record in the "email_otps" table.
+_OTP_TABLE = "email_otps"
+_OTP_TTL = timedelta(minutes=10)  # how long a freshly issued code stays valid
+_OTP_VERIFIED_TTL = timedelta(minutes=30)  # how long a verification lets you apply
+_OTP_MAX_ATTEMPTS = 5
+
+
+def _norm_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _parse_iso(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+class OtpRequestIn(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    email: str = Field(min_length=3, max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        if not _EMAIL_RE.match(v):
+            raise ValueError("invalid email")
+        return v
+
+
+class OtpVerifyIn(OtpRequestIn):
+    code: str = Field(min_length=4, max_length=4)
+
+    @field_validator("code")
+    @classmethod
+    def _code(cls, v: str) -> str:
+        if not v.isdigit():
+            raise ValueError("invalid code")
+        return v
+
+
+def _email_is_verified(repo: DocumentRepository, email: str) -> bool:
+    """True when the email has a recent, successful verification on record."""
+    rec = repo.get(_OTP_TABLE, _norm_email(email))
+    if not rec or not rec.get("verified"):
+        return False
+    verified_at = _parse_iso(rec.get("verifiedAt"))
+    return verified_at is not None and _now() <= verified_at + _OTP_VERIFIED_TTL
+
+
+def _already_applied(repo: DocumentRepository, job_id: str, email: str) -> bool:
+    """True when this email already has an application for the given job."""
+    target = email.strip().lower()
+    existing = repo.find("candidates", {"jobId": job_id})
+    return any((c.get("email") or "").strip().lower() == target for c in existing)
+
+
+class AppliedCheckIn(OtpRequestIn):
+    jobId: str = Field(min_length=1, max_length=64)
+
+
+@router.post("/check-applied")
+def check_applied(
+    body: AppliedCheckIn,
+    repo: DocumentRepository = Depends(get_repository),
+) -> dict[str, Any]:
+    """Whether this email has already applied to this posting (one per role)."""
+    return {"applied": _already_applied(repo, body.jobId, body.email)}
+
+
+@router.post("/otp/request")
+def otp_request(
+    body: OtpRequestIn,
+    background_tasks: BackgroundTasks,
+    repo: DocumentRepository = Depends(get_repository),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    """Generate a 4-digit code, store it, and email it to the applicant."""
+    email = _norm_email(body.email)
+    code = f"{secrets.randbelow(10000):04d}"
+    repo.upsert(
+        _OTP_TABLE,
+        email,
+        {
+            "id": email,
+            "email": email,
+            "code": code,
+            "expiresAt": (_now() + _OTP_TTL).isoformat(),
+            "attempts": 0,
+            "verified": False,
+            "verifiedAt": None,
+        },
+    )
+    logger.info("OTP requested for %s", email)
+    resp: dict[str, Any] = {"ok": True}
+    if not settings.has_smtp:
+        # No email transport configured (local dev) — return the code directly so
+        # the flow stays testable. Never happens once a transport is set up.
+        resp["devCode"] = code
+        return resp
+    # Send in the BACKGROUND so the HTTP response returns immediately — the SMTP
+    # send can take a few seconds, and a long-pending request is fragile in the
+    # browser (it can surface as "Failed to fetch"). Delivery failures are logged.
+    background_tasks.add_task(send_otp_email, settings, email, code)
+    return resp
+
+
+@router.post("/otp/verify")
+def otp_verify(
+    body: OtpVerifyIn,
+    repo: DocumentRepository = Depends(get_repository),
+) -> dict[str, Any]:
+    """Check a code against the stored OTP and mark the email verified."""
+    email = _norm_email(body.email)
+    rec = repo.get(_OTP_TABLE, email)
+    if rec is None:
+        raise ValidationError("Request a verification code first.")
+    expires = _parse_iso(rec.get("expiresAt"))
+    if expires is None or _now() > expires:
+        raise ValidationError("This code has expired. Please request a new one.")
+    if int(rec.get("attempts", 0)) >= _OTP_MAX_ATTEMPTS:
+        raise ValidationError("Too many attempts. Please request a new code.")
+    if str(rec.get("code")) != body.code:
+        rec["attempts"] = int(rec.get("attempts", 0)) + 1
+        repo.upsert(_OTP_TABLE, email, rec)
+        raise ValidationError("That code is incorrect. Please try again.")
+    rec["verified"] = True
+    rec["verifiedAt"] = _now().isoformat()
+    repo.upsert(_OTP_TABLE, email, rec)
+    logger.info("OTP verified for %s", email)
+    return {"ok": True}
 
 
 class ApplicationIn(BaseModel):
@@ -124,6 +267,7 @@ class ApplicationIn(BaseModel):
 
 @router.post("/apply", status_code=201)
 async def apply(
+    background_tasks: BackgroundTasks,
     payload: str = Form(...),
     resume: UploadFile = File(...),
     repo: DocumentRepository = Depends(get_repository),
@@ -149,6 +293,14 @@ async def apply(
         raise ValidationError("This opening could not be found.")
     if job.get("status") != "Open":
         raise ValidationError("Applications for this opening are closed.")
+
+    # 2b) The email must have been verified via OTP on this device/session.
+    if not _email_is_verified(repo, app_in.email):
+        raise ValidationError("Please verify your email before applying.")
+
+    # 2c) One application per email, per posting — block re-applications.
+    if _already_applied(repo, app_in.jobId, app_in.email):
+        raise ValidationError("You have already applied to this role with this email.")
 
     # 3) Validate the resume bytes — must be a real, non-empty PDF within limit.
     data = await resume.read()
@@ -219,6 +371,17 @@ async def apply(
     }
     repo.upsert("candidates", candidate_id, candidate)
     logger.info("Public application stored: candidate=%s job=%s", candidate_id, app_in.jobId)
+
+    # 7) Consume the one-time email verification so it can't be reused, and email
+    #    the applicant an automatic acknowledgement (best-effort, in background).
+    repo.delete(_OTP_TABLE, _norm_email(app_in.email))
+    background_tasks.add_task(
+        send_application_received,
+        settings,
+        app_in.email,
+        candidate["fullName"],
+        job.get("title", ""),
+    )
 
     # Return only an acknowledgement — never echo stored data back to the public.
     return {"ok": True}

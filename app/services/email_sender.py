@@ -1048,3 +1048,72 @@ def send_schedule_email(
     except Exception:  # noqa: BLE001 - never propagate; report failure to caller
         logger.exception("Failed to send schedule email (%s) to %s.", schedule_type, to)
         return False
+
+
+def send_otp_email(settings: Settings, to: str, code: str) -> bool:
+    """Email a one-time verification code to a job applicant. Logs failures,
+    never raises (runs inside a BackgroundTask)."""
+    try:
+        inner = (
+            '<p style="margin:0 0 12px;font-size:18px;font-weight:bold;color:#111827;">'
+            "Verify your email</p>"
+            '<p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.6;">'
+            "Use this code to verify your email address and continue your job application:</p>"
+            '<p style="margin:0 0 16px;font-size:34px;font-weight:bold;letter-spacing:10px;'
+            f'color:#9a1f33;">{html.escape(code)}</p>'
+            '<p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6;">'
+            "This code expires in 10 minutes. If you didn&#39;t request it, you can ignore this email.</p>"
+        )
+        msg = EmailMessage()
+        msg["Subject"] = "Your verification code"
+        msg["From"] = f"{settings.smtp_from_name} <{settings.from_address}>"
+        if settings.smtp_reply_to.strip():
+            msg["Reply-To"] = settings.smtp_reply_to.strip()
+        msg["To"] = to
+        msg.set_content(
+            f"Your verification code is {code}. It expires in 10 minutes. "
+            "If you didn't request it, ignore this email."
+        )
+        msg.add_alternative(_wrap_branded(inner), subtype="html")
+        _deliver(settings, msg)
+        logger.info("OTP email sent to %s.", to)
+        return True
+    except Exception:  # noqa: BLE001 - never propagate; report failure to caller
+        logger.exception("Failed to send OTP email to %s.", to)
+        return False
+
+
+def send_application_received(settings: Settings, to: str, name: str, role: str) -> bool:
+    """Confirm to a candidate that their application was received. Logs failures,
+    never raises (runs inside a BackgroundTask)."""
+    try:
+        safe_name = html.escape(name.strip() or "there")
+        safe_role = html.escape(role.strip() or "the role")
+        inner = (
+            f'<p style="margin:0 0 14px;font-size:15px;color:#374151;">Hi {safe_name},</p>'
+            '<p style="margin:0 0 14px;font-size:14px;color:#374151;line-height:1.6;">'
+            "Thank you for showing interest in our organization. We have received your "
+            f"application for <strong>{safe_role}</strong>.</p>"
+            '<p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">'
+            "Our HR team will review your details and reach out about the next steps. "
+            "We appreciate the time you took to apply.</p>"
+        )
+        msg = EmailMessage()
+        msg["Subject"] = f"We received your application — {role.strip() or 'your role'}"
+        msg["From"] = f"{settings.smtp_from_name} <{settings.from_address}>"
+        if settings.smtp_reply_to.strip():
+            msg["Reply-To"] = settings.smtp_reply_to.strip()
+        msg["To"] = to
+        msg.set_content(
+            f"Hi {name.strip() or 'there'},\n\n"
+            "Thank you for showing interest in our organization. We have received your "
+            f"application for {role.strip() or 'the role'}. Our HR team will review your "
+            "details and reach out about the next steps.\n\n— The Optiminastic HR Team"
+        )
+        msg.add_alternative(_wrap_branded(inner), subtype="html")
+        _deliver(settings, msg)
+        logger.info("Application-received email sent to %s.", to)
+        return True
+    except Exception:  # noqa: BLE001 - never propagate; report failure to caller
+        logger.exception("Failed to send application-received email to %s.", to)
+        return False
