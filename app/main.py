@@ -70,24 +70,45 @@ def create_app() -> FastAPI:
         ]
     )
     public_write_paths = {"/api/public/apply", "/api/candidates", "/api/documents"}
+    # The OTP / email-check endpoints get their own (looser) per-IP budget — a
+    # single applicant makes a few calls (check + request + verify [+ resend]).
+    # This caps an IP from spamming codes to many different emails; the per-EMAIL
+    # cap (public.py) caps bombing one address. Both hold for ANY caller — website,
+    # server action, or a replayed cURL — so abuse can't bypass it via the client.
+    otp_limiter = SlidingWindowRateLimiter(
+        [
+            (settings.otp_rate_limit_per_minute, 60.0),
+            (settings.otp_rate_limit_per_hour, 3600.0),
+        ]
+    )
+    otp_paths = {
+        "/api/public/otp/request",
+        "/api/public/otp/verify",
+        "/api/public/check-applied",
+    }
 
     @app.middleware("http")
     async def rate_limit_public_writes(request: Request, call_next):
-        if (
-            settings.rate_limit_enabled
-            and request.method == "POST"
-            and request.url.path in public_write_paths
-            and not is_exempt_origin(request.headers.get("origin", ""), settings)
-            and not public_write_limiter.allow(client_ip(request))
-        ):
-            logger.warning(
-                "Rate limit hit: ip=%s path=%s", client_ip(request), request.url.path
+        path = request.url.path
+        if settings.rate_limit_enabled and request.method == "POST":
+            limiter = (
+                public_write_limiter
+                if path in public_write_paths
+                else otp_limiter
+                if path in otp_paths
+                else None
             )
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Too many requests. Please wait a minute and try again."},
-                headers={"Retry-After": "60"},
-            )
+            if (
+                limiter is not None
+                and not is_exempt_origin(request.headers.get("origin", ""), settings)
+                and not limiter.allow(client_ip(request))
+            ):
+                logger.warning("Rate limit hit: ip=%s path=%s", client_ip(request), path)
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many requests. Please wait a minute and try again."},
+                    headers={"Retry-After": "60"},
+                )
         return await call_next(request)
 
     # Compress large list payloads — JSONB resource lists shrink ~5-10x.

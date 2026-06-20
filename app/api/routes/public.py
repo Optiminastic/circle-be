@@ -31,14 +31,21 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError as PydanticVa
 
 from app.api.dependencies import get_repository, get_storage
 from app.core.config import Settings, get_settings
-from app.core.errors import ValidationError
+from app.core.errors import RateLimitedError, ValidationError
 from app.core.logging import get_logger
+from app.core.security import require_internal_caller
 from app.repositories.base import DocumentRepository
 from app.services.email_sender import send_application_received, send_otp_email
 from app.services.screening import build_answers, compute_fit
 from app.storage.base import FileStorage
 
-router = APIRouter(prefix="/api/public", tags=["public"])
+# Every route here is gated by the shared internal token — these endpoints are
+# called only by the careers server (server actions), never the browser/cURL.
+router = APIRouter(
+    prefix="/api/public",
+    tags=["public"],
+    dependencies=[Depends(require_internal_caller)],
+)
 
 logger = get_logger("curcle.public")
 
@@ -69,6 +76,7 @@ _OTP_TABLE = "email_otps"
 _OTP_TTL = timedelta(minutes=10)  # how long a freshly issued code stays valid
 _OTP_VERIFIED_TTL = timedelta(minutes=30)  # how long a verification lets you apply
 _OTP_MAX_ATTEMPTS = 5
+_OTP_ISSUE_WINDOW = timedelta(hours=1)  # rolling window for the per-email issue cap
 
 
 def _norm_email(email: str) -> str:
@@ -148,9 +156,42 @@ def otp_request(
     repo: DocumentRepository = Depends(get_repository),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    """Generate a 4-digit code, store it, and email it to the applicant."""
+    """Generate a 4-digit code, store it, and email it to the applicant.
+
+    Hardened against OTP spam / replay no matter how the request arrives (website,
+    server action, or a copied cURL) — the limits live HERE on the server:
+      * a per-email rolling cap on codes issued per hour;
+      * a short resend cooldown so a held code can't be re-sent in a loop;
+      * (the per-IP cap is enforced by the middleware in app.main).
+    """
     email = _norm_email(body.email)
+    now = _now()
+    existing = repo.get(_OTP_TABLE, email) or {}
+
+    # Keep only the issue timestamps still inside the rolling window.
+    issued_times: list[str] = []
+    for raw in existing.get("issuedTimes") or []:
+        ts = _parse_iso(raw)
+        if ts is not None and now - ts < _OTP_ISSUE_WINDOW:
+            issued_times.append(raw)
+
+    # Per-email hard cap: only N codes may be issued to one address per window.
+    if len(issued_times) >= settings.otp_max_per_email_per_hour:
+        logger.warning("OTP issue cap hit for %s (%d in window)", email, len(issued_times))
+        raise RateLimitedError(
+            "Too many verification codes requested for this email. Please try again later."
+        )
+
+    # Resend cooldown: swallow rapid re-requests (success, but no new code sent)
+    # so a freshly issued code can't be re-mailed in a tight loop.
+    parsed = [p for p in (_parse_iso(t) for t in issued_times) if p is not None]
+    last_issued = max(parsed, default=None)
+    cooldown = timedelta(seconds=settings.otp_resend_cooldown_seconds)
+    if last_issued is not None and now - last_issued < cooldown:
+        return {"ok": True}
+
     code = f"{secrets.randbelow(10000):04d}"
+    issued_times.append(now.isoformat())
     repo.upsert(
         _OTP_TABLE,
         email,
@@ -158,13 +199,20 @@ def otp_request(
             "id": email,
             "email": email,
             "code": code,
-            "expiresAt": (_now() + _OTP_TTL).isoformat(),
+            "issuedAt": now.isoformat(),
+            "issuedTimes": issued_times,
+            "expiresAt": (now + _OTP_TTL).isoformat(),
             "attempts": 0,
             "verified": False,
             "verifiedAt": None,
         },
     )
-    logger.info("OTP requested for %s", email)
+    logger.info(
+        "OTP requested for %s (%d/%d in window)",
+        email,
+        len(issued_times),
+        settings.otp_max_per_email_per_hour,
+    )
     resp: dict[str, Any] = {"ok": True}
     if not settings.has_smtp:
         # No email transport configured (local dev) — return the code directly so
@@ -365,6 +413,7 @@ async def apply(
         "hrRemarks": _clean(app_in.coverNote),
         "status": "New Application",
         "appliedDate": date.today().isoformat(),
+        "appliedAt": datetime.now(timezone.utc).isoformat(),
         "jobId": app_in.jobId,
         "screeningAnswers": answers or None,
         "fitRating": fit,

@@ -73,6 +73,14 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     public_rate_limit_per_minute: int = 6  # ~3 applications/min/IP (2 calls each)
     public_rate_limit_per_hour: int = 30  # ~15 applications/hour/IP
+    # Per-IP caps for the OTP / email-check endpoints (looser than apply, since a
+    # single applicant makes a few calls: check + request + verify [+ resend]).
+    otp_rate_limit_per_minute: int = 10
+    otp_rate_limit_per_hour: int = 40
+    # Per-EMAIL caps on OTP generation (independent of IP) — stops email-bombing a
+    # single address even from many IPs. See app/api/routes/public.py.
+    otp_max_per_email_per_hour: int = 5
+    otp_resend_cooldown_seconds: int = 30
     # The HR dashboard origin — requests from here are never rate-limited.
     hr_app_origin: str = "https://circle.optiminastic.com"
 
@@ -90,6 +98,13 @@ class Settings(BaseSettings):
     google_calendar_id: str = "primary"  # which calendar events are written to
     # Where the OAuth callback redirects the browser back to (the Settings page).
     frontend_url: str = "http://localhost:3001"
+
+    # Shared secret that gates the PUBLIC careers endpoints (OTP request/verify,
+    # applied-check, apply). The careers server (a Next.js server action) attaches
+    # it as the `X-Internal-Token` header; a browser or copied cURL can't know it,
+    # so direct calls to /api/public/* are rejected. Leave BLANK to disable the
+    # gate (not recommended in production) — must match the careers server's value.
+    internal_api_token: str = ""
 
     @field_validator("cors_origins", mode="before")
     @classmethod

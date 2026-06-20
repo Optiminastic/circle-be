@@ -40,6 +40,20 @@ class ValidationError(AppError):
     code = "validation_error"
 
 
+class AuthError(AppError):
+    """The caller is not authorized to use this endpoint."""
+
+    status_code = 403
+    code = "forbidden"
+
+
+class RateLimitedError(AppError):
+    """Too many requests — slow down and retry later."""
+
+    status_code = 429
+    code = "rate_limited"
+
+
 class RepositoryError(AppError):
     """The data store is unavailable or a query failed."""
 
