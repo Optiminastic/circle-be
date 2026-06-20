@@ -33,19 +33,15 @@ from app.api.dependencies import get_repository, get_storage
 from app.core.config import Settings, get_settings
 from app.core.errors import RateLimitedError, ValidationError
 from app.core.logging import get_logger
-from app.core.security import require_internal_caller
 from app.repositories.base import DocumentRepository
 from app.services.email_sender import send_application_received, send_otp_email
 from app.services.screening import build_answers, compute_fit
 from app.storage.base import FileStorage
 
-# Every route here is gated by the shared internal token — these endpoints are
-# called only by the careers server (server actions), never the browser/cURL.
-router = APIRouter(
-    prefix="/api/public",
-    tags=["public"],
-    dependencies=[Depends(require_internal_caller)],
-)
+# These public, login-less endpoints are protected by abuse controls, not a
+# secret: a per-email OTP cap + resend cooldown (below) and per-IP rate limits in
+# app.main that apply to EVERY caller — website, server action, or a copied cURL.
+router = APIRouter(prefix="/api/public", tags=["public"])
 
 logger = get_logger("curcle.public")
 

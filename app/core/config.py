@@ -99,13 +99,6 @@ class Settings(BaseSettings):
     # Where the OAuth callback redirects the browser back to (the Settings page).
     frontend_url: str = "http://localhost:3001"
 
-    # Shared secret that gates the PUBLIC careers endpoints (OTP request/verify,
-    # applied-check, apply). The careers server (a Next.js server action) attaches
-    # it as the `X-Internal-Token` header; a browser or copied cURL can't know it,
-    # so direct calls to /api/public/* are rejected. Leave BLANK to disable the
-    # gate (not recommended in production) — must match the careers server's value.
-    internal_api_token: str = ""
-
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_csv(cls, value: object) -> object:

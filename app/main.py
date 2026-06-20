@@ -86,6 +86,11 @@ def create_app() -> FastAPI:
         "/api/public/otp/verify",
         "/api/public/check-applied",
     }
+    # Only the HR-app write paths honour the trusted-origin exemption (so staff
+    # aren't throttled). The PUBLIC careers paths (apply + OTP/check) are NEVER
+    # exempt: they have no login, and a direct or copied-from-DevTools cURL can
+    # spoof the Origin header — so they must always be throttled by client IP.
+    hr_write_paths = {"/api/candidates", "/api/documents"}
 
     @app.middleware("http")
     async def rate_limit_public_writes(request: Request, call_next):
@@ -98,11 +103,10 @@ def create_app() -> FastAPI:
                 if path in otp_paths
                 else None
             )
-            if (
-                limiter is not None
-                and not is_exempt_origin(request.headers.get("origin", ""), settings)
-                and not limiter.allow(client_ip(request))
-            ):
+            exempt = path in hr_write_paths and is_exempt_origin(
+                request.headers.get("origin", ""), settings
+            )
+            if limiter is not None and not exempt and not limiter.allow(client_ip(request)):
                 logger.warning("Rate limit hit: ip=%s path=%s", client_ip(request), path)
                 return JSONResponse(
                     status_code=429,
