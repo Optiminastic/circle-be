@@ -1,8 +1,8 @@
 """Document storage endpoints (resumes & important files).
 
 Metadata lives in the `documents` Postgres table (via the repository); the blob
-lives in Backblaze B2. Uploads are proxied; downloads are short-lived presigned
-URLs so the bucket stays private.
+lives in AWS S3. Uploads are proxied; downloads are short-lived presigned URLs
+so the bucket stays private.
 """
 
 from __future__ import annotations
@@ -179,7 +179,7 @@ def import_from_drive(
     storage: FileStorage = Depends(get_storage),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    """Import a copy of a Google Drive file into B2.
+    """Import a copy of a Google Drive file into S3.
 
     The browser supplies a short-lived OAuth access token (drive.readonly) from
     the Google Picker; the backend pulls the bytes once and stores them like any

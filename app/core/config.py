@@ -38,13 +38,20 @@ class Settings(BaseSettings):
     # a plain comma-separated string from .env.
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000", "http://localhost:3001"]
 
-    # Backblaze B2 (S3-compatible) object storage.
-    b2_key_id: str = ""
-    b2_application_key: str = ""
-    b2_endpoint: str = ""
-    b2_region: str = ""
-    b2_bucket: str = ""
+    # AWS S3 object storage. S3-compatible providers also work via AWS_S3_ENDPOINT.
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_region: str = ""
+    aws_bucket_name: str = ""
+    # Optional custom endpoint for S3-compatible providers; empty = real AWS S3.
+    aws_s3_endpoint: str = ""
+    # Optional key prefix (a "folder") all objects are stored under, e.g. "Circle".
+    aws_s3_prefix: str = ""
     max_upload_mb: int = 15
+
+    # Optional dedicated key for encrypting sensitive at-rest fields (exit-handover
+    # credentials). If unset, a key is derived from existing app secrets.
+    credentials_key: str = ""
 
     # SMTP for candidate notification emails. Works with Gmail (user = the full
     # address, also the From) or providers like SendGrid (user = "apikey",
@@ -73,6 +80,11 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     public_rate_limit_per_minute: int = 6  # ~3 applications/min/IP (2 calls each)
     public_rate_limit_per_hour: int = 30  # ~15 applications/hour/IP
+    # Looser caps for public token-gated FILE uploads (onboarding docs + exit
+    # handover) — a single handover can be many files submitted in quick
+    # succession (one POST per file), so it needs more headroom than apply.
+    upload_rate_limit_per_minute: int = 40
+    upload_rate_limit_per_hour: int = 200
     # Per-IP caps for the OTP / email-check endpoints (looser than apply, since a
     # single applicant makes a few calls: check + request + verify [+ resend]).
     otp_rate_limit_per_minute: int = 10
@@ -124,7 +136,12 @@ class Settings(BaseSettings):
 
     @property
     def has_storage(self) -> bool:
-        return bool(self.b2_key_id and self.b2_bucket and self.b2_endpoint)
+        return bool(
+            self.aws_access_key_id
+            and self.aws_secret_access_key
+            and self.aws_bucket_name
+            and self.aws_region
+        )
 
     @property
     def sendgrid_key(self) -> str:

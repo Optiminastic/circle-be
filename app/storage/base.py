@@ -1,6 +1,6 @@
 """Object-storage abstraction (DIP).
 
-Routes depend on this Protocol, not on boto3/B2 — swapping providers (or using a
+Routes depend on this Protocol, not on boto3/S3 — swapping providers (or using a
 fake in tests) means another implementation, no route changes.
 """
 

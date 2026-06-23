@@ -7,7 +7,7 @@ router (`/api/doc-requests`); this module adds the two operations that need
 special handling:
 
   * POST /api/doc-requests/{token}/upload — public, multipart. Validates the
-    token + expiry, stores the blob in B2, records it in the `documents` table
+    token + expiry, stores the blob in S3, records it in the `documents` table
     (so HR can pull a presigned URL later) and stamps the submission onto the
     request.
 

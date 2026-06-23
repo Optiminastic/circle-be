@@ -28,7 +28,7 @@ def get_database(request: Request) -> Database:
 def get_storage(request: Request) -> FileStorage:
     storage = getattr(request.app.state, "storage", None)
     if storage is None:
-        raise StorageError("Document storage is not configured. Set the B2_* env vars and restart.")
+        raise StorageError("Document storage is not configured. Set the AWS_* env vars and restart.")
     return storage
 
 

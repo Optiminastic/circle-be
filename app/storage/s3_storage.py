@@ -1,4 +1,5 @@
-"""Backblaze B2 (S3-compatible) implementation of FileStorage.
+"""AWS S3 implementation of FileStorage (also works with any S3-compatible
+provider via AWS_S3_ENDPOINT).
 
 Uploads are proxied through the backend; downloads are served as short-lived
 presigned URLs so the bucket stays private. All boto errors are normalized to
@@ -20,19 +21,34 @@ logger = get_logger("curcle.storage")
 
 class S3FileStorage:
     def __init__(self, settings: Settings) -> None:
-        self._bucket = settings.b2_bucket
+        self._bucket = settings.aws_bucket_name
+        # Optional "folder" prefix every object is stored under (e.g. "Circle").
+        # Applied here so routes/DB keep working with un-prefixed keys.
+        self._prefix = settings.aws_s3_prefix.strip().strip("/")
+        # Use the REGIONAL S3 endpoint (e.g. s3.ap-south-1.amazonaws.com). Without
+        # it boto3 may sign against the global host (s3.amazonaws.com), which makes
+        # presigned download URLs fail with SignatureDoesNotMatch for buckets
+        # outside us-east-1. A custom AWS_S3_ENDPOINT (B2/MinIO) overrides this.
+        endpoint = settings.aws_s3_endpoint or (
+            f"https://s3.{settings.aws_region}.amazonaws.com" if settings.aws_region else None
+        )
         self._client = boto3.client(
             "s3",
-            endpoint_url=settings.b2_endpoint,
-            aws_access_key_id=settings.b2_key_id,
-            aws_secret_access_key=settings.b2_application_key,
-            region_name=settings.b2_region,
+            endpoint_url=endpoint,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            region_name=settings.aws_region,
             config=Config(signature_version="s3v4", retries={"max_attempts": 3, "mode": "standard"}),
         )
 
+    def _full_key(self, key: str) -> str:
+        return f"{self._prefix}/{key}" if self._prefix else key
+
     def put(self, key: str, data: bytes, content_type: str) -> None:
         try:
-            self._client.put_object(Bucket=self._bucket, Key=key, Body=data, ContentType=content_type)
+            self._client.put_object(
+                Bucket=self._bucket, Key=self._full_key(key), Body=data, ContentType=content_type
+            )
         except (BotoCoreError, ClientError) as exc:
             logger.exception("put_object failed for %s", key)
             raise StorageError("Failed to store the file") from exc
@@ -40,7 +56,7 @@ class S3FileStorage:
     def get(self, key: str) -> tuple[bytes, str]:
         """Read an object's bytes and stored content type (for inline streaming)."""
         try:
-            resp = self._client.get_object(Bucket=self._bucket, Key=key)
+            resp = self._client.get_object(Bucket=self._bucket, Key=self._full_key(key))
             data = resp["Body"].read()
             content_type = resp.get("ContentType") or "application/octet-stream"
             return data, content_type
@@ -58,7 +74,7 @@ class S3FileStorage:
     ) -> str:
         # ResponseContentDisposition/Type override the response headers when the
         # URL is fetched — used to force inline preview instead of a download.
-        params: dict[str, str] = {"Bucket": self._bucket, "Key": key}
+        params: dict[str, str] = {"Bucket": self._bucket, "Key": self._full_key(key)}
         if disposition:
             params["ResponseContentDisposition"] = disposition
         if content_type:
@@ -71,7 +87,7 @@ class S3FileStorage:
 
     def delete(self, key: str) -> None:
         try:
-            self._client.delete_object(Bucket=self._bucket, Key=key)
+            self._client.delete_object(Bucket=self._bucket, Key=self._full_key(key))
         except (BotoCoreError, ClientError) as exc:
             logger.exception("delete_object failed for %s", key)
             raise StorageError("Failed to delete the file") from exc

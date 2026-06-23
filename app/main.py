@@ -14,7 +14,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import calendar, doc_requests, documents, meta, notifications, public, resources
+from app.api.routes import (
+    calendar,
+    doc_requests,
+    documents,
+    exit_handover,
+    meta,
+    notifications,
+    public,
+    resources,
+)
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
@@ -40,10 +49,10 @@ def create_app() -> FastAPI:
 
         if settings.has_storage:
             app.state.storage = S3FileStorage(settings)
-            logger.info("Object storage configured (bucket=%s).", settings.b2_bucket)
+            logger.info("Object storage configured (bucket=%s).", settings.aws_bucket_name)
         else:
             app.state.storage = None
-            logger.warning("B2 storage not configured — document endpoints will return 502.")
+            logger.warning("S3 storage not configured — document endpoints will return 502.")
 
         logger.info("%s v%s started.", settings.app_name, settings.app_version)
         try:
@@ -69,7 +78,25 @@ def create_app() -> FastAPI:
             (settings.public_rate_limit_per_hour, 3600.0),
         ]
     )
+    # Separate, looser limiter for public token-gated FILE uploads so a legitimate
+    # multi-file handover (one POST per file) isn't throttled.
+    public_upload_limiter = SlidingWindowRateLimiter(
+        [
+            (settings.upload_rate_limit_per_minute, 60.0),
+            (settings.upload_rate_limit_per_hour, 3600.0),
+        ]
+    )
     public_write_paths = {"/api/public/apply", "/api/candidates", "/api/documents"}
+
+    def _is_public_upload(path: str) -> bool:
+        """Public, token-gated file-upload endpoints (onboarding + exit handover)."""
+        return (path.startswith("/api/exit-handovers/portal/") and path.endswith("/upload")) or (
+            path.startswith("/api/doc-requests/") and path.endswith("/upload")
+        )
+
+    def _is_public_credential(path: str) -> bool:
+        """Public, token-gated exit-handover credential submission."""
+        return path.startswith("/api/exit-handovers/portal/") and path.endswith("/credentials")
     # NOTE: the OTP / email-check endpoints are intentionally NOT per-IP rate
     # limited. Many candidates can legitimately request a code at the same time —
     # from a shared office/college network, or all via the careers server's single
@@ -80,20 +107,30 @@ def create_app() -> FastAPI:
     # aren't throttled); the public apply path is always throttled per IP.
     hr_write_paths = {"/api/candidates", "/api/documents"}
 
+    def _too_many(ip: str, path: str) -> JSONResponse:
+        logger.warning("Rate limit hit: ip=%s path=%s", ip, path)
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests. Please wait a minute and try again."},
+            headers={"Retry-After": "60"},
+        )
+
     @app.middleware("http")
     async def rate_limit_public_writes(request: Request, call_next):
         path = request.url.path
-        if settings.rate_limit_enabled and request.method == "POST" and path in public_write_paths:
-            exempt = path in hr_write_paths and is_exempt_origin(
-                request.headers.get("origin", ""), settings
-            )
-            if not exempt and not public_write_limiter.allow(client_ip(request)):
-                logger.warning("Rate limit hit: ip=%s path=%s", client_ip(request), path)
-                return JSONResponse(
-                    status_code=429,
-                    content={"detail": "Too many requests. Please wait a minute and try again."},
-                    headers={"Retry-After": "60"},
+        if settings.rate_limit_enabled and request.method == "POST":
+            ip = client_ip(request)
+            # Public token-gated uploads — never origin-exempt; looser per-IP cap.
+            if _is_public_upload(path):
+                if not public_upload_limiter.allow(ip):
+                    return _too_many(ip, path)
+            # Apply, credential submission, and HR writes — strict per-IP cap.
+            elif path in public_write_paths or _is_public_credential(path):
+                exempt = path in hr_write_paths and is_exempt_origin(
+                    request.headers.get("origin", ""), settings
                 )
+                if not exempt and not public_write_limiter.allow(ip):
+                    return _too_many(ip, path)
         return await call_next(request)
 
     # Compress large list payloads — JSONB resource lists shrink ~5-10x.
@@ -127,6 +164,8 @@ def create_app() -> FastAPI:
     # Hardened public router must precede the generic resources router so its
     # literal /api/public/* paths win over "/api/{resource}".
     app.include_router(public.router)
+    # Token-gated exit-handover routes must precede the generic resources router.
+    app.include_router(exit_handover.router)
     app.include_router(resources.router)
     return app
 
