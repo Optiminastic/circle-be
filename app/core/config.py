@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # Where candidate replies should land (Reply-To header). Falls back to the
     # From address when unset.
     smtp_reply_to: str = "hr@optiminastic.com"
+    # Always CC HR on recruitment correspondence (interview invites, the Physical
+    # Interview pack, test invites/results, decisions). Blank disables it.
+    hr_cc_email: str = "hr@optiminastic.com"
     # Resend HTTP API key (used INSTEAD of SMTP when set — Render free tier blocks
     # outbound SMTP). Auto-derived from the Resend SMTP password if not set.
     resend_api_key: str = ""

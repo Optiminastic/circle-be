@@ -44,6 +44,16 @@ def _addr_list(msg: EmailMessage, header: str) -> list[dict[str, str]]:
     return [{"email": a.strip()} for a in raw.split(",") if a.strip()]
 
 
+def _add_hr_cc(settings: Settings, msg: EmailMessage, to: str) -> None:
+    """CC the HR mailbox on recruitment correspondence (candidate/interviewer
+    emails) so HR keeps a copy of every thread. Skipped when HR *is* the
+    recipient, or when no CC mailbox is configured. All transports already honour
+    the Cc header (Resend/SendGrid read it; SMTP send_message adds it)."""
+    cc = (settings.hr_cc_email or "").strip()
+    if cc and cc.lower() != to.strip().lower() and "Cc" not in msg:
+        msg["Cc"] = cc
+
+
 def _deliver_resend(settings: Settings, msg: EmailMessage) -> None:
     """Send via Resend's HTTPS API (works where outbound SMTP is blocked, e.g.
     Render's free tier). Extracts the text/HTML parts + attachments from the
@@ -795,6 +805,7 @@ def send_test_email(
         if settings.smtp_reply_to.strip():
             msg["Reply-To"] = settings.smtp_reply_to.strip()
         msg["To"] = to
+        _add_hr_cc(settings, msg, to)
         msg.set_content(text_fallback)
         msg.add_alternative(_wrap_branded(inner), subtype="html")
 
@@ -980,6 +991,7 @@ def send_custom_email(
         if settings.smtp_reply_to.strip():
             msg["Reply-To"] = settings.smtp_reply_to.strip()
         msg["To"] = to
+        _add_hr_cc(settings, msg, to)
         msg.set_content(text_body)
         msg.add_alternative(_wrap_custom(inner), subtype="html")
 
@@ -1028,6 +1040,7 @@ def send_schedule_email(
         if settings.smtp_reply_to.strip():
             msg["Reply-To"] = settings.smtp_reply_to.strip()
         msg["To"] = to
+        _add_hr_cc(settings, msg, to)
         msg.set_content(
             _build_text(
                 schedule_type, candidate_name, when_ist,

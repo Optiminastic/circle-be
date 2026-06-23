@@ -123,6 +123,7 @@ class GoogleCalendarService:
         attendees: list[str] | None = None,
         location: str | None = None,
         google_event_id: str | None = None,
+        online: bool | None = None,
         request_id: str,
     ) -> dict[str, Any]:
         """Create or patch a calendar event. Returns {id, hangoutLink?}.
@@ -130,6 +131,11 @@ class GoogleCalendarService:
         Attendees (candidate / interviewer / HR) are invited via Google's own
         invitation email (sendUpdates="all"). Both the legacy single
         ``attendee_email`` and the ``attendees`` list are accepted and merged.
+
+        A Google Meet link is attached when ``online`` is True (the explicit
+        signal from the scheduler). When ``online`` is None (callers that don't
+        set it), it falls back to the event-type heuristic (``_MEET_TYPES``) so
+        existing flows keep working — and an offline interview gets no Meet link.
         """
         start = self._parse(start_iso)
         end = start + timedelta(minutes=max(duration_min or 30, 1))
@@ -148,8 +154,11 @@ class GoogleCalendarService:
         emails = list(dict.fromkeys(e.strip() for e in merged if e and e.strip()))
         if emails:
             body["attendees"] = [{"email": e} for e in emails]
-        add_meet = event_type in _MEET_TYPES
-        if add_meet and not google_event_id:
+        add_meet = online if online is not None else (event_type in _MEET_TYPES)
+        # Attach a Meet on create AND on patch (the latter lets an in-person event
+        # be turned online later — e.g. the Physical Interview step). Re-using the
+        # same requestId is idempotent: Google returns the existing conference.
+        if add_meet:
             body["conferenceData"] = {
                 "createRequest": {
                     "requestId": request_id,

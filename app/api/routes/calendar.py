@@ -105,6 +105,7 @@ class PushEventIn(BaseModel):
     attendeeEmail: str | None = None
     attendees: list[str] | None = None  # candidate / interviewer / HR
     location: str | None = None  # office address or meeting link
+    online: bool | None = None  # True → attach a Google Meet link; False → none
 
 
 @router.post("/events")
@@ -135,6 +136,7 @@ def push_event(
             attendees=payload.attendees,
             location=payload.location,
             google_event_id=google_event_id,
+            online=payload.online,
             request_id=payload.appEventId,
         )
     except Exception:  # noqa: BLE001
