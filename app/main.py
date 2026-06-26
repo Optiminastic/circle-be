@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import (
     calendar,
+    candidate_handoff,
     doc_requests,
     documents,
     exit_handover,
@@ -97,6 +98,11 @@ def create_app() -> FastAPI:
     def _is_public_credential(path: str) -> bool:
         """Public, token-gated exit-handover credential submission."""
         return path.startswith("/api/exit-handovers/portal/") and path.endswith("/credentials")
+
+    def _is_candidate_feed(path: str) -> bool:
+        """Public, token-gated candidate feed (GET) — exposes PII, so it's per-IP
+        rate limited so a leaked URL can't be scraped at speed."""
+        return path.startswith("/api/candidate-feed/")
     # NOTE: the OTP / email-check endpoints are intentionally NOT per-IP rate
     # limited. Many candidates can legitimately request a code at the same time —
     # from a shared office/college network, or all via the careers server's single
@@ -131,6 +137,11 @@ def create_app() -> FastAPI:
                 )
                 if not exempt and not public_write_limiter.allow(ip):
                     return _too_many(ip, path)
+        # The public candidate feed (GET) exposes PII — throttle per IP too.
+        elif settings.rate_limit_enabled and request.method == "GET" and _is_candidate_feed(path):
+            ip = client_ip(request)
+            if not public_write_limiter.allow(ip):
+                return _too_many(ip, path)
         return await call_next(request)
 
     # Compress large list payloads — JSONB resource lists shrink ~5-10x.
@@ -166,6 +177,11 @@ def create_app() -> FastAPI:
     app.include_router(public.router)
     # Token-gated exit-handover routes must precede the generic resources router.
     app.include_router(exit_handover.router)
+    # Candidate-handoff "mark arrived" must precede the generic resources router so
+    # "/{candidate_id}/send" wins over "/api/candidate-handoffs/{id}".
+    app.include_router(candidate_handoff.router)
+    # Public token-gated candidate feed (separate prefix, no resource conflict).
+    app.include_router(candidate_handoff.feed_router)
     app.include_router(resources.router)
     return app
 

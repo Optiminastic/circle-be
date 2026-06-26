@@ -36,6 +36,9 @@ _DEFS: tuple[ResourceDef, ...] = (
     ResourceDef("sent-emails", "sent_emails", "id"),
     ResourceDef("offboarding", "offboarding", "employeeId"),
     ResourceDef("exit-handovers", "exit_handovers", "employeeId"),
+    # Public, token-gated handoff of a hired candidate's profile + documents to an
+    # external onboarding system (created by HR, read by the other app).
+    ResourceDef("candidate-handoffs", "candidate_handoffs", "candidateId"),
     # Google Calendar: single shared-account OAuth row + per-event id mapping.
     ResourceDef("google-oauth", "google_oauth", "id"),
     ResourceDef("calendar-links", "calendar_links", "id"),

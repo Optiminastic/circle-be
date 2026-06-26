@@ -114,6 +114,13 @@ class Settings(BaseSettings):
     # Where the OAuth callback redirects the browser back to (the Settings page).
     frontend_url: str = "http://localhost:3001"
 
+    # Candidate handoff feed — Curcle hosts ONE public, token-gated URL that an
+    # external onboarding system fetches to get every candidate HR has marked
+    # "arrived in office" (curated fields + verified document links). The token is
+    # the secret embedded in the feed URL (/api/candidate-feed/<token>). Empty =
+    # feed disabled (returns 404).
+    candidate_feed_token: str = ""
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_csv(cls, value: object) -> object:
@@ -190,6 +197,10 @@ class Settings(BaseSettings):
     @property
     def has_google(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def has_candidate_feed(self) -> bool:
+        return bool(self.candidate_feed_token.strip())
 
 
 @lru_cache
