@@ -42,6 +42,12 @@ _DEFS: tuple[ResourceDef, ...] = (
     # Google Calendar: single shared-account OAuth row + per-event id mapping.
     ResourceDef("google-oauth", "google_oauth", "id"),
     ResourceDef("calendar-links", "calendar_links", "id"),
+    # Question Library banks — created by HR, shared across devices (replaces the
+    # old per-browser localStorage). One record per bank; iq-bank is a singleton.
+    ResourceDef("assessment-banks", "assessment_banks", "id"),
+    ResourceDef("interview-banks", "interview_banks", "id"),
+    ResourceDef("screening-banks", "screening_banks", "id"),
+    ResourceDef("iq-bank", "iq_bank", "id"),
 )
 
 RESOURCES: dict[str, ResourceDef] = {d.slug: d for d in _DEFS}
