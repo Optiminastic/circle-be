@@ -1,0 +1,31 @@
+# circle-be on the shared Hetzner VPS — API container ONLY.
+#
+# This box already runs another app (avora) whose Caddy owns ports 80/443 and
+# which has its own Postgres. So circle-be:
+#   • runs ONLY the API (no second Caddy, no second Postgres),
+#   • uses the external Neon database (DATABASE_URL in .env),
+#   • joins avora's reverse-proxy network so that existing Caddy can route
+#     api.circle.optiminastic.com -> this container (by name "circle-be-api").
+# We never touch the avora containers.
+#
+#   docker compose up -d --build      # start / rebuild
+#   docker compose logs -f api        # tail logs
+#   docker compose down               # stop
+#
+# Set PROXY_NETWORK in .env to the network avora's Caddy is on (usually
+# "deploy_default" — verify per DEPLOY.md).
+services:
+  api:
+    build: .
+    container_name: circle-be-api
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "8000"          # internal only; the shared Caddy reaches it by name
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-deploy_default}

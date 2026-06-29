@@ -1,0 +1,22 @@
+# Keep the image small and secret-free. .env is provided at runtime via
+# docker-compose `env_file`, never baked into the image.
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.db
+*.sqlite3
+.git/
+.gitignore
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage*
+*.log
+.DS_Store
+Thumbs.db
