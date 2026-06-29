@@ -1,31 +1,56 @@
-# circle-be on the shared Hetzner VPS — API container ONLY.
+# circle-be on the shared Hetzner VPS — own Postgres + API; shared Caddy.
 #
-# This box already runs another app (avora) whose Caddy owns ports 80/443 and
-# which has its own Postgres. So circle-be:
-#   • runs ONLY the API (no second Caddy, no second Postgres),
-#   • uses the external Neon database (DATABASE_URL in .env),
-#   • joins avora's reverse-proxy network so that existing Caddy can route
-#     api.circle.optiminastic.com -> this container (by name "circle-be-api").
-# We never touch the avora containers.
+# The box already runs avora (whose Caddy owns 80/443). So circle-be:
+#   • runs its OWN Postgres (`db`) on the VPS — data migrated in from Neon,
+#   • runs the API (`api`),
+#   • does NOT run a second Caddy (ports 80/443 are taken). Instead the API joins
+#     avora's reverse-proxy network so that existing Caddy can route
+#     api.circle.optiminastic.com -> circle-be-api:8000.
+# We never touch the avora containers — only add one site block to their Caddy.
 #
 #   docker compose up -d --build      # start / rebuild
 #   docker compose logs -f api        # tail logs
-#   docker compose down               # stop
+#   docker compose down               # stop (keeps the circle_pgdata volume)
 #
-# Set PROXY_NETWORK in .env to the network avora's Caddy is on (usually
-# "deploy_default" — verify per DEPLOY.md).
+# Set PROXY_NETWORK in .env to avora's Caddy network (verify per DEPLOY.md).
 services:
+  db:
+    image: postgres:17-alpine
+    container_name: circle-be-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: circle
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: circle
+    volumes:
+      - circle_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U circle -d circle"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
   api:
     build: .
     container_name: circle-be-api
     restart: unless-stopped
     env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
     expose:
-      - "8000"          # internal only; the shared Caddy reaches it by name
+      - "8000"            # internal only; the shared Caddy reaches it by name
     networks:
-      - proxy
+      - internal          # to reach the db service
+      - proxy             # so avora's Caddy can reach this container
 
 networks:
+  internal:
   proxy:
     external: true
     name: ${PROXY_NETWORK:-deploy_default}
+
+volumes:
+  circle_pgdata:

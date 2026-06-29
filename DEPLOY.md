@@ -1,113 +1,80 @@
 # Deploying circle-be on the shared Hetzner VPS
 
-This box already runs another app (**avora**): its **Caddy owns ports 80/443**
-and it has its own Postgres. So circle-be is deployed as **just one API
-container** that:
-- uses the **external Neon** database (already holds candidates, jobs, and the
-  migrated question banks) — no Postgres on the VPS,
-- joins **avora's reverse-proxy network** so avora's existing Caddy can route
-  `api.circle.optiminastic.com` → circle-be over HTTPS.
+The box already runs **avora** (its Caddy owns ports 80/443). circle-be runs as:
+- its **own Postgres** (`db`) on the VPS — data migrated in from Neon once,
+- the **API** (`api`),
+- **no second Caddy** — the API joins avora's reverse-proxy network and avora's
+  existing Caddy routes `api.circle.optiminastic.com` → `circle-be-api:8000`.
 
-**We never touch the avora containers.** We only (a) run our own container and
-(b) add one site block to the shared Caddy's config (additive, reversible).
+We never touch the avora containers — we only add **one site block** to the
+shared Caddy (additive, reversible). A bad edit can't break avora: `caddy reload`
+validates first and keeps the old config on error.
 
 Files: `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `.env.production.example`.
 
 ---
 
-## 0. Prereqs (gather)
-- SSH to the VPS (the same user that runs `docker` for avora).
-- The **Neon** `DATABASE_URL` (icy-flower prod DB).
-- `AWS_*` (B2/S3) and `GOOGLE_CLIENT_ID/SECRET` values.
-- The Gmail app password for `careers@optiminastic.com` (if using SMTP email).
+## 0. Gather
+- SSH to the VPS. The **Neon** `DATABASE_URL` (migration source). `AWS_*`,
+  `GOOGLE_CLIENT_ID/SECRET`, and the Gmail app password.
 
-## 1. Discover avora's proxy network + Caddy config
+## 1. Find avora's Caddy network + Caddyfile
 ```bash
-docker ps   # confirm the avora caddy container name (e.g. deploy-caddy-1)
-
-# Which Docker network is that Caddy on?  (usually "deploy_default")
-docker inspect deploy-caddy-1 -f '{{range $k,$_ := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}'
-
-# Where is its Caddyfile mounted from on the host?  (note the Source path)
-docker inspect deploy-caddy-1 -f '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
+docker inspect deploy-caddy-1 -f '{{range $k,$_ := .NetworkSettings.Networks}}{{println $k}}{{end}}'   # -> PROXY_NETWORK
+docker inspect deploy-caddy-1 -f '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'      # -> host Caddyfile path
 ```
-Note the **network name** (call it `<NET>`) and the host path of the **Caddyfile**
-(call it `<CADDYFILE>`).
 
-## 2. Get circle-be onto the VPS
+## 2. Code + env
 ```bash
-sudo mkdir -p /opt/circle-be && sudo chown "$USER":"$USER" /opt/circle-be
-git clone <circle-be repo URL> /opt/circle-be      # or scp the folder up
 cd /opt/circle-be
-```
-
-## 3. Configure `.env`
-```bash
-cp .env.production.example .env
+git pull                        # already a clone; brings Dockerfile/compose/etc.
+cp .env.production.example .env  # if you don't have .env yet
 nano .env
 ```
-Set:
-- `DATABASE_URL=` the Neon URL (`postgresql://…neon.tech/neondb?sslmode=require&channel_binding=require`)
-- `PROXY_NETWORK=<NET>` from step 1 (e.g. `deploy_default`)
-- `CORS_ORIGINS=https://circle.optiminastic.com`, `FRONTEND_URL=https://circle.optiminastic.com`
-- `GOOGLE_REDIRECT_URI=https://api.circle.optiminastic.com/api/calendar/oauth/callback`
-- `AWS_*`, `GOOGLE_CLIENT_ID/SECRET`
-- Email (Gmail SMTP): `SMTP_USER=careers@optiminastic.com`, `SMTP_PASSWORD=<app password>`,
-  `SMTP_FROM_EMAIL=careers@optiminastic.com` (leave `RESEND_API_KEY`/`SENDGRID_API_KEY` blank).
+Set in `.env`:
+- `POSTGRES_PASSWORD=<strong>` and `DATABASE_URL=postgresql+psycopg://circle:<strong>@db:5432/circle`
+- `PROXY_NETWORK=<network from step 1>`
+- `CORS_ORIGINS`, `FRONTEND_URL`, `GOOGLE_*` (no trailing `\n` in the secret!), `AWS_*`, `SMTP_*`.
 
-## 4. Build & start the API (no ports published — Caddy reaches it internally)
+## 3. Build & start (Postgres + API; nothing published)
 ```bash
 docker compose up -d --build
-docker compose logs -f api      # expect "Database engine initialized" + "... started"
+docker compose logs -f api      # "Database engine initialized" + "... started"
 ```
-`AUTO_CREATE_TABLES=true` ensures any missing tables exist on the Neon DB (idempotent).
 
-Quick internal check (from a container on the same network):
+## 4. Migrate the data Neon → VPS Postgres
 ```bash
-docker exec deploy-caddy-1 wget -qO- http://circle-be-api:8000/api/health ; echo
-# -> {"status":"ok","database":"up"}
+docker run --rm postgres:17-alpine pg_dump "<NEON_DATABASE_URL>" \
+  --no-owner --no-privileges -Fc > /tmp/circle.dump
+docker compose exec -T db pg_restore --no-owner --clean --if-exists -U circle -d circle < /tmp/circle.dump
+docker compose restart api
 ```
+(Match the `postgres:17-alpine` tag to Neon's major version if it warns.)
 
-## 5. Add the site to avora's Caddy (additive)
-Append this block to `<CADDYFILE>` (the host path from step 1):
+## 5. Route the domain through avora's Caddy
+Append to the Caddyfile (host path from step 1):
 ```
 api.circle.optiminastic.com {
     reverse_proxy circle-be-api:8000
 }
 ```
-Then reload Caddy **without restarting avora**:
+Reload without restarting avora:
 ```bash
 docker exec deploy-caddy-1 caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
-(Use the in-container config path Caddy was started with — the `Destination` from
-step 1's mounts, typically `/etc/caddy/Caddyfile`.)
 
-## 6. DNS cutover
-Point `api.circle.optiminastic.com`'s **A record** at the **VPS IP** (it currently
-points at Render). Once it resolves to the VPS, Caddy auto-issues the TLS cert on
-first request.
+## 6. DNS
+Point `api.circle.optiminastic.com` A-record at the VPS IP. Caddy auto-issues TLS.
 
 ## 7. Verify
 ```bash
 curl -fsS https://api.circle.optiminastic.com/api/health   # {"status":"ok","database":"up"}
-curl -fsS https://api.circle.optiminastic.com/             # app info JSON
 ```
-Then load the Vercel frontend (`https://circle.optiminastic.com`) and confirm it
-reads data + the Question Library shows the banks.
+Then load the Vercel frontend and confirm data + Question Library.
 
-## 8. Decommission Render
-Once the VPS serves the live domain and everything works, suspend/delete the
-Render service so only one backend runs.
-
----
-
-## Day-2 ops
-- **Redeploy:** `cd /opt/circle-be && git pull && docker compose up -d --build`
-- **Logs / restart:** `docker compose logs -f api` · `docker compose restart api`
-- **Change env:** edit `.env` → `docker compose up -d`.
-- **Remove circle-be:** `docker compose down`, then delete the Caddy site block and reload Caddy.
-
-## Notes
-- DB backups are Neon's responsibility (branching/PITR) — nothing to back up on the VPS.
-- The avora stack is untouched: we only added one container + one Caddy site block.
-- Real secrets live only in the server `.env` (git-ignored); `.env.production.example` has placeholders.
+## Day-2
+- Redeploy: `git pull && docker compose up -d --build`
+- Logs/restart: `docker compose logs -f api` · `docker compose restart api`
+- **DB backup (you own it now):**
+  `docker compose exec -T db pg_dump -U circle circle | gzip > /opt/backups/circle-$(date +%F).sql.gz`
+- Remove: `docker compose down`, delete the Caddy block, reload Caddy.
