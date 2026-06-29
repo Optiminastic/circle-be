@@ -53,9 +53,8 @@ class Settings(BaseSettings):
     # credentials). If unset, a key is derived from existing app secrets.
     credentials_key: str = ""
 
-    # SMTP for candidate notification emails. Works with Gmail (user = the full
-    # address, also the From) or providers like SendGrid (user = "apikey",
-    # password = the API key, and a distinct verified SMTP_FROM_EMAIL sender).
+    # SMTP for candidate notification emails. Gmail: user = the full address
+    # (which is also the From sender), password = a Gmail app password.
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_user: str = ""  # login username (Gmail address, or literally "apikey")
@@ -71,10 +70,6 @@ class Settings(BaseSettings):
     # Resend HTTP API key (used INSTEAD of SMTP when set — Render free tier blocks
     # outbound SMTP). Auto-derived from the Resend SMTP password if not set.
     resend_api_key: str = ""
-    # SendGrid HTTP API (used INSTEAD of SMTP when set — required on hosts that
-    # block outbound SMTP, e.g. Render free tier). Send over HTTPS, no SMTP ports.
-    # Requires a verified sender/domain in SendGrid and SMTP_FROM_EMAIL set to it.
-    sendgrid_api_key: str = ""
 
     # Anti-spam rate limiting for the PUBLIC, unauthenticated writes (job
     # application: candidate create + resume upload). Limits are per client IP.
@@ -154,21 +149,6 @@ class Settings(BaseSettings):
         )
 
     @property
-    def sendgrid_key(self) -> str:
-        """The SendGrid API key for the HTTPS transport.
-
-        Uses SENDGRID_API_KEY if set, otherwise reuses the SMTP password when the
-        SMTP config already points at SendGrid (host smtp.sendgrid.net, user
-        'apikey'). This lets an existing SendGrid-over-SMTP setup switch to the
-        API automatically on hosts that block SMTP — no new env var needed.
-        """
-        if self.sendgrid_api_key:
-            return self.sendgrid_api_key
-        if "sendgrid" in self.smtp_host.lower() and self.smtp_user.lower() == "apikey":
-            return self.smtp_password
-        return ""
-
-    @property
     def resend_key(self) -> str:
         """The Resend API key for the HTTPS transport.
 
@@ -185,13 +165,13 @@ class Settings(BaseSettings):
 
     @property
     def has_smtp(self) -> bool:
-        # True when ANY email transport is configured (Resend/SendGrid HTTP or SMTP).
-        return bool(self.resend_key or self.sendgrid_key or (self.smtp_user and self.smtp_password))
+        # True when an email transport is configured (Resend HTTP or SMTP).
+        return bool(self.resend_key or (self.smtp_user and self.smtp_password))
 
     @property
     def from_address(self) -> str:
-        """The envelope From email. Defaults to smtp_user for Gmail, where the
-        login address is also the sender; SendGrid needs a verified sender."""
+        """The envelope From email. Defaults to smtp_user (Gmail's login address
+        is also the sender)."""
         return self.smtp_from_email or self.smtp_user
 
     @property

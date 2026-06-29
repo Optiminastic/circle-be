@@ -32,7 +32,6 @@ logger = get_logger("curcle.email")
 
 # How long to wait for an SMTP/HTTP connection before giving up.
 _SMTP_TIMEOUT = 20
-_SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send"
 _RESEND_URL = "https://api.resend.com/emails"
 # Cloudflare (in front of api.resend.com) blocks the default "Python-urllib"
 # agent with error 1010 — every HTTP-API call sends this normal UA instead.
@@ -47,8 +46,8 @@ def _addr_list(msg: EmailMessage, header: str) -> list[dict[str, str]]:
 def _add_hr_cc(settings: Settings, msg: EmailMessage, to: str) -> None:
     """CC the HR mailbox on recruitment correspondence (candidate/interviewer
     emails) so HR keeps a copy of every thread. Skipped when HR *is* the
-    recipient, or when no CC mailbox is configured. All transports already honour
-    the Cc header (Resend/SendGrid read it; SMTP send_message adds it)."""
+    recipient, or when no CC mailbox is configured. Both transports honour the Cc
+    header (Resend reads it; SMTP send_message adds it)."""
     cc = (settings.hr_cc_email or "").strip()
     if cc and cc.lower() != to.strip().lower() and "Cc" not in msg:
         msg["Cc"] = cc
@@ -128,101 +127,19 @@ def _deliver_resend(settings: Settings, msg: EmailMessage) -> None:
         raise RuntimeError(f"Resend {exc.code}: {detail}") from exc
 
 
-def _deliver_sendgrid(settings: Settings, msg: EmailMessage) -> None:
-    """Send via SendGrid's HTTPS API (works where outbound SMTP is blocked, e.g.
-    Render's free tier). Extracts the text/HTML parts + any attachments from the
-    already-built EmailMessage. Raises on failure; callers log and swallow."""
-    text_value, html_value = "", ""
-    attachments: list[dict[str, str]] = []
-    for part in msg.walk():
-        if part.get_content_maintype() == "multipart":
-            continue
-        if part.get_content_disposition() == "attachment":
-            payload = part.get_payload(decode=True) or b""
-            attachments.append(
-                {
-                    "content": base64.b64encode(payload).decode("ascii"),
-                    "filename": part.get_filename() or "attachment",
-                    "type": part.get_content_type(),
-                    "disposition": "attachment",
-                }
-            )
-        elif part.get_content_type() == "text/plain" and not text_value:
-            text_value = part.get_content()
-        elif part.get_content_type() == "text/html" and not html_value:
-            html_value = part.get_content()
-
-    content = []
-    if text_value:
-        content.append({"type": "text/plain", "value": text_value})
-    if html_value:
-        content.append({"type": "text/html", "value": html_value})
-    if not content:
-        content.append({"type": "text/plain", "value": ""})
-
-    # SendGrid requires every address to be unique across to/cc/bcc — dedupe the
-    # To list, then drop any Cc that repeats a To (or another Cc).
-    to_addrs: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for a in _addr_list(msg, "To"):
-        key = a["email"].lower()
-        if key and key not in seen:
-            seen.add(key)
-            to_addrs.append(a)
-    cc_addrs: list[dict[str, str]] = []
-    for a in _addr_list(msg, "Cc"):
-        key = a["email"].lower()
-        if key and key not in seen:
-            seen.add(key)
-            cc_addrs.append(a)
-
-    personalization: dict[str, object] = {"to": to_addrs}
-    if cc_addrs:
-        personalization["cc"] = cc_addrs
-
-    body: dict[str, object] = {
-        "personalizations": [personalization],
-        "from": {"email": settings.from_address, "name": settings.smtp_from_name},
-        "subject": msg.get("Subject") or "",
-        "content": content,
-    }
-    if attachments:
-        body["attachments"] = attachments
-
-    req = urllib.request.Request(
-        _SENDGRID_URL,
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {settings.sendgrid_key}",
-            "Content-Type": "application/json",
-            "User-Agent": _HTTP_USER_AGENT,
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=_SMTP_TIMEOUT):  # noqa: S310 (fixed host)
-            return  # 202 Accepted
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "replace")[:500]
-        raise RuntimeError(f"SendGrid {exc.code}: {detail}") from exc
-
-
 def _deliver(settings: Settings, msg: EmailMessage, to_addrs: list[str] | None = None) -> None:
     """Send one message via the configured transport.
 
-    Prefers an HTTP API (Resend, then SendGrid) when configured — these work on
-    networks that block outbound SMTP (e.g. Render's free tier). Otherwise uses
-    SMTP — implicit TLS (SMTP_SSL) on port 465, STARTTLS elsewhere. Raises on
-    failure; callers log and swallow.
+    Prefers the Resend HTTP API when configured (works on networks that block
+    outbound SMTP, e.g. Render's free tier). Otherwise uses SMTP — implicit TLS
+    (SMTP_SSL) on port 465, STARTTLS elsewhere. Raises on failure; callers log
+    and swallow.
     """
     if settings.smtp_reply_to and "Reply-To" not in msg:
         msg["Reply-To"] = settings.smtp_reply_to
 
     if settings.resend_key:
         _deliver_resend(settings, msg)
-        return
-    if settings.sendgrid_key:
-        _deliver_sendgrid(settings, msg)
         return
 
     if settings.smtp_port == 465:
