@@ -44,12 +44,12 @@ docker compose logs -f api      # "Database engine initialized" + "... started"
 
 ## 4. Migrate the data Neon → VPS Postgres
 ```bash
-docker run --rm postgres:17-alpine pg_dump "<NEON_DATABASE_URL>" \
+docker run --rm postgres:18-alpine pg_dump "<NEON_DATABASE_URL>" \
   --no-owner --no-privileges -Fc > /tmp/circle.dump
 docker compose exec -T db pg_restore --no-owner --clean --if-exists -U circle -d circle < /tmp/circle.dump
 docker compose restart api
 ```
-(Match the `postgres:17-alpine` tag to Neon's major version if it warns.)
+(Match the `postgres:18-alpine` tag to Neon's major version if it warns.)
 
 ## 5. Route the domain through avora's Caddy
 Append to the Caddyfile (host path from step 1):

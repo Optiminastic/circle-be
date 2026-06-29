@@ -15,7 +15,7 @@
 # Set PROXY_NETWORK in .env to avora's Caddy network (verify per DEPLOY.md).
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     container_name: circle-be-db
     restart: unless-stopped
     environment:
