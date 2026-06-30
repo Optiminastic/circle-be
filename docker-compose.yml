@@ -23,7 +23,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: circle
     volumes:
-      - circle_pgdata:/var/lib/postgresql/data
+      # Postgres 18 images store data in a version-specific subdir, so the volume
+      # must mount at /var/lib/postgresql (NOT /var/lib/postgresql/data).
+      - circle_pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U circle -d circle"]
       interval: 10s
