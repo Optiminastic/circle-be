@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import (
     calendar,
+    candidate_delete,
     candidate_handoff,
     doc_requests,
     documents,
@@ -182,6 +183,10 @@ def create_app() -> FastAPI:
     app.include_router(candidate_handoff.router)
     # Public token-gated candidate feed (separate prefix, no resource conflict).
     app.include_router(candidate_handoff.feed_router)
+    # Cascade delete for candidates must precede the generic resources router so
+    # DELETE /api/candidates/{id} cleans up related records (other methods fall
+    # through to the generic router).
+    app.include_router(candidate_delete.router)
     app.include_router(resources.router)
     return app
 

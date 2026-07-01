@@ -48,6 +48,10 @@ _DEFS: tuple[ResourceDef, ...] = (
     ResourceDef("interview-banks", "interview_banks", "id"),
     ResourceDef("screening-banks", "screening_banks", "id"),
     ResourceDef("iq-bank", "iq_bank", "id"),
+    # Interviewer feedback sheet payloads — stored under a short unguessable token
+    # so the link emailed to an interviewer stays short (instead of base64-encoding
+    # the whole payload into the URL). Read by the public /interview-sheet page.
+    ResourceDef("interview-sheets", "interview_sheets", "id"),
 )
 
 RESOURCES: dict[str, ResourceDef] = {d.slug: d for d in _DEFS}
