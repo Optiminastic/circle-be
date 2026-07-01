@@ -1,0 +1,65 @@
+name: Deploy circle-be to VPS
+
+# Auto-deploy the backend to the Hetzner VPS on every push to main.
+# GitHub's runner SSHes into the VPS (as the `deploy` user, key auth) and runs
+# the same commands you'd run by hand, then verifies the app is healthy.
+#
+# Requires three repo secrets (Settings -> Secrets and variables -> Actions):
+#   VPS_HOST     = 65.21.186.55
+#   VPS_USER     = deploy
+#   VPS_SSH_KEY  = the PRIVATE deploy key (full contents, incl. BEGIN/END lines)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}          # lets you trigger a deploy manually from the Actions tab
+
+concurrency:
+  group: deploy-circle-be
+  cancel-in-progress: false       # never interrupt a deploy in progress; queue instead
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS over SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VPS_SSH_KEY:-}" ] || [ -z "${VPS_HOST:-}" ] || [ -z "${VPS_USER:-}" ]; then
+            echo "Missing one of the required secrets: VPS_HOST / VPS_USER / VPS_SSH_KEY"
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          # The deploy script that runs ON the VPS (single-quoted so the runner
+          # passes it through verbatim; the remote shell expands the variables).
+          REMOTE_SCRIPT='
+          set -e
+          cd /opt/circle-be
+          echo ">>> git pull"
+          git pull --ff-only
+          echo ">>> docker compose up -d --build"
+          docker compose up -d --build
+          echo ">>> health check"
+          ok=0
+          for i in $(seq 1 20); do
+            if docker exec circle-be-api curl -fsS http://localhost:8000/api/health >/dev/null 2>&1; then
+              ok=1; break
+            fi
+            sleep 3
+          done
+          if [ "$ok" != "1" ]; then
+            echo "HEALTH CHECK FAILED"
+            docker compose logs --tail 60 api || true
+            exit 1
+          fi
+          echo ">>> Deployed and healthy."
+          '
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" "bash -s" <<< "$REMOTE_SCRIPT"
