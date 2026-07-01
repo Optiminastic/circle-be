@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
@@ -24,10 +24,21 @@ from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.repositories.base import DocumentRepository
 from app.services.google_calendar import GoogleCalendarService
+from app.services.sessions import COOKIE_NAME, read_session
 
 logger = get_logger("curcle.calendar")
 
-router = APIRouter(prefix="/api/calendar", tags=["calendar"])
+
+def guard_calendar(request: Request, settings: Settings = Depends(get_settings)) -> None:
+    """Only the Google OAuth redirect target is public (Google calls it with no
+    cookie). Status, connect, and event push/delete require a dashboard session."""
+    if request.url.path.rstrip("/").endswith("/oauth/callback"):
+        return
+    if not read_session(settings, request.cookies.get(COOKIE_NAME)):
+        raise HTTPException(status_code=401, detail="Authentication required. Please sign in.")
+
+
+router = APIRouter(prefix="/api/calendar", tags=["calendar"], dependencies=[Depends(guard_calendar)])
 
 _OAUTH_TABLE = "google_oauth"
 _OAUTH_ROW_ID = "shared"

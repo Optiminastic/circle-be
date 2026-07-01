@@ -22,16 +22,20 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from app.api.dependencies import get_repository, get_storage
+from app.api.dependencies import get_repository, get_storage, require_user
 from app.core.config import Settings, get_settings
 from app.core.errors import NotFoundError
 from app.core.logging import get_logger
 from app.repositories.base import DocumentRepository
 from app.storage.base import FileStorage
 
-# HR-facing actions (authenticated app, like the rest of /api/*).
-router = APIRouter(prefix="/api/candidate-handoffs", tags=["candidate-handoffs"])
-# Public, token-gated pull feed for the external onboarding system.
+# HR-facing actions — require a dashboard session.
+router = APIRouter(
+    prefix="/api/candidate-handoffs",
+    tags=["candidate-handoffs"],
+    dependencies=[Depends(require_user)],
+)
+# Public, token-gated pull feed for the external onboarding system (own token check).
 feed_router = APIRouter(prefix="/api/candidate-feed", tags=["candidate-feed"])
 
 logger = get_logger("curcle.candidate_handoff")

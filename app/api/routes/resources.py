@@ -9,15 +9,52 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 
 from app.api.dependencies import get_resource_service
+from app.core.config import Settings, get_settings
 from app.domain.registry import get_resource
 from app.services.resource_service import ResourceService
-
-router = APIRouter(prefix="/api", tags=["resources"])
+from app.services.sessions import COOKIE_NAME, read_session
 
 Document = dict[str, Any]
+
+# The ONLY generic operations reachable without a dashboard login — the
+# token-gated public pages (candidate test, onboarding docs) depend on them. The
+# unguessable id/token in the URL is the credential. Everything else on
+# /api/{resource} (all lists, all candidate/employee/interview reads+writes)
+# requires a valid session. `auth-users` is blocked here entirely (managed only
+# via /api/auth/*). The interviewer sheet uses dedicated /api/public/* routes.
+# Reads by unguessable token id (candidate test + onboarding-doc pages).
+_PUBLIC_GET_BY_ID = {"test-invites", "doc-requests"}
+# Writes: only the candidate's own onboarding bank details. Test-invite writes go
+# through the write-once /api/public/test/* endpoints instead of an arbitrary PATCH.
+_PUBLIC_PATCH_BY_ID = {"doc-requests"}
+
+
+def _is_public_generic(method: str, resource: str, has_item_id: bool) -> bool:
+    if method == "GET" and has_item_id and resource in _PUBLIC_GET_BY_ID:
+        return True
+    if method == "PATCH" and has_item_id and resource in _PUBLIC_PATCH_BY_ID:
+        return True
+    return False
+
+
+def guard_resources(request: Request, settings: Settings = Depends(get_settings)) -> None:
+    """Router-level auth gate: require a session unless the op is public-allowlisted."""
+    parts = request.url.path.strip("/").split("/")  # ["api", <resource>, <item_id>?]
+    resource = parts[1] if len(parts) > 1 else ""
+    has_item_id = len(parts) > 2
+    if resource == "auth-users":
+        # Never expose accounts (or their password hashes) via the generic API.
+        raise HTTPException(status_code=404, detail="Not found.")
+    if _is_public_generic(request.method, resource, has_item_id):
+        return
+    if not read_session(settings, request.cookies.get(COOKIE_NAME)):
+        raise HTTPException(status_code=401, detail="Authentication required. Please sign in.")
+
+
+router = APIRouter(prefix="/api", tags=["resources"], dependencies=[Depends(guard_resources)])
 
 
 @router.get("/{resource}")

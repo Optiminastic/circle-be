@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import get_repository, get_storage
@@ -24,9 +24,25 @@ from app.core.config import Settings, get_settings
 from app.core.errors import NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.repositories.base import DocumentRepository
+from app.services.sessions import COOKIE_NAME, read_session
 from app.storage.base import FileStorage
 
-router = APIRouter(prefix="/api/documents", tags=["documents"])
+
+def guard_documents(request: Request, settings: Settings = Depends(get_settings)) -> None:
+    """Public: view a document by its unguessable id (resume links in emails, the
+    exit-handover portal, the interviewer sheet) and the careers-apply resume
+    upload (per-IP rate limited). Listing all documents, deleting, and drive
+    imports require a dashboard session."""
+    method, path = request.method, request.url.path.rstrip("/")
+    if method == "GET" and (path.endswith("/preview") or path.endswith("/url")):
+        return
+    if method == "POST" and path == "/api/documents":  # resume upload (apply flow)
+        return
+    if not read_session(settings, request.cookies.get(COOKIE_NAME)):
+        raise HTTPException(status_code=401, detail="Authentication required. Please sign in.")
+
+
+router = APIRouter(prefix="/api/documents", tags=["documents"], dependencies=[Depends(guard_documents)])
 
 logger = get_logger("curcle.documents")
 

@@ -7,8 +7,9 @@ abstractions. Sessions are opened per request and always closed (error tolerance
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import Any
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -18,6 +19,7 @@ from app.repositories.base import DocumentRepository
 from app.repositories.document_repository import SqlAlchemyDocumentRepository
 from app.services.google_calendar import GoogleCalendarService
 from app.services.resource_service import ResourceService
+from app.services.sessions import read_session
 from app.storage.base import FileStorage
 
 
@@ -52,3 +54,26 @@ def get_google_calendar_service(
     settings: Settings = Depends(get_settings),
 ) -> GoogleCalendarService:
     return GoogleCalendarService(settings)
+
+
+# --- Auth ---------------------------------------------------------------------
+
+def current_user(
+    request: Request, settings: Settings = Depends(get_settings)
+) -> dict[str, Any] | None:
+    """Decode the session cookie into {email, role, name}, or None if unauthenticated."""
+    from app.services.sessions import COOKIE_NAME
+
+    return read_session(settings, request.cookies.get(COOKIE_NAME))
+
+
+def require_user(user: dict[str, Any] | None = Depends(current_user)) -> dict[str, Any]:
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required. Please sign in.")
+    return user
+
+
+def require_admin(user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Administrator access required.")
+    return user

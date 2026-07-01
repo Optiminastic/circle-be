@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""  # login username (Gmail address, or literally "apikey")
     smtp_password: str = ""  # Gmail app password, or the provider API key
     smtp_from_email: str = ""  # verified sender; falls back to smtp_user (Gmail)
-    smtp_from_name: str = "Optiminastic HR Team"
+    smtp_from_name: str = "Optiminastic Careers"
     # Where candidate replies should land (Reply-To header). Falls back to the
     # From address when unset.
     smtp_reply_to: str = "hr@optiminastic.com"
@@ -115,6 +115,13 @@ class Settings(BaseSettings):
     # the secret embedded in the feed URL (/api/candidate-feed/<token>). Empty =
     # feed disabled (returns 404).
     candidate_feed_token: str = ""
+
+    # --- Auth / dashboard sessions ---
+    # Secret used to sign the httpOnly session cookie. Set SESSION_SECRET in prod
+    # for a stable dedicated key; otherwise it falls back to an existing secret
+    # (rotating that secret just invalidates existing sessions, which is fine).
+    session_secret: str = ""
+    session_ttl_hours: int = 12
 
     @field_validator("cors_origins", mode="before")
     @classmethod

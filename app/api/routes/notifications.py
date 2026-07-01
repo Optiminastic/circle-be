@@ -13,10 +13,15 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from app.api.dependencies import require_user
 from app.core.config import Settings, get_settings
 from app.services.email_sender import send_custom_email, send_schedule_email, send_test_email
 
-router = APIRouter(prefix="/api/notifications", tags=["notifications"])
+# Sending mail is an HR action — require a session so this can't be used as an
+# open relay to send arbitrary email from the org's address.
+router = APIRouter(
+    prefix="/api/notifications", tags=["notifications"], dependencies=[Depends(require_user)]
+)
 
 
 class ScheduleEmailIn(BaseModel):

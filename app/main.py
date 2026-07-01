@@ -15,16 +15,19 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes import (
+    auth,
     calendar,
     candidate_delete,
     candidate_handoff,
     doc_requests,
     documents,
     exit_handover,
+    interview_public,
     meta,
     notifications,
     public,
     resources,
+    test_public,
 )
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
@@ -47,6 +50,10 @@ def create_app() -> FastAPI:
         database.connect()
         if settings.auto_create_tables:
             database.ensure_tables([*all_tables(), "documents", "email_otps"])
+            # Seed the default dashboard accounts (hashed) on a fresh DB. Existing
+            # accounts are left as-is (legacy plaintext rows are upgraded to a hash
+            # on their next successful login).
+            auth.seed_admin_accounts(database)
         app.state.database = database
 
         if settings.has_storage:
@@ -88,7 +95,7 @@ def create_app() -> FastAPI:
             (settings.upload_rate_limit_per_hour, 3600.0),
         ]
     )
-    public_write_paths = {"/api/public/apply", "/api/candidates", "/api/documents"}
+    public_write_paths = {"/api/public/apply", "/api/candidates", "/api/documents", "/api/auth/login"}
 
     def _is_public_upload(path: str) -> bool:
         """Public, token-gated file-upload endpoints (onboarding + exit handover)."""
@@ -173,9 +180,15 @@ def create_app() -> FastAPI:
     app.include_router(doc_requests.router)
     app.include_router(notifications.router)
     app.include_router(calendar.router)
+    # Auth (login/logout/me + admin account mgmt) — its own /api/auth/* prefix.
+    app.include_router(auth.router)
     # Hardened public router must precede the generic resources router so its
     # literal /api/public/* paths win over "/api/{resource}".
     app.include_router(public.router)
+    # Public interviewer-sheet endpoints (/api/public/interview-sheet/*).
+    app.include_router(interview_public.router)
+    # Public candidate test endpoints (/api/public/test/*) — write-once results.
+    app.include_router(test_public.router)
     # Token-gated exit-handover routes must precede the generic resources router.
     app.include_router(exit_handover.router)
     # Candidate-handoff "mark arrived" must precede the generic resources router so

@@ -15,12 +15,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response
 
-from app.api.dependencies import get_repository, get_storage
+from app.api.dependencies import get_repository, get_storage, require_user
 from app.core.logging import get_logger
 from app.repositories.base import DocumentRepository
 from app.storage.base import FileStorage
 
-router = APIRouter(prefix="/api/candidates", tags=["candidates"])
+# Deleting a candidate is destructive + cascades — require a dashboard session.
+router = APIRouter(prefix="/api/candidates", tags=["candidates"], dependencies=[Depends(require_user)])
 
 logger = get_logger("curcle.candidate_delete")
 
