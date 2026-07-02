@@ -19,20 +19,27 @@ from app.services.sessions import COOKIE_NAME, read_session
 
 Document = dict[str, Any]
 
-# The ONLY generic operations reachable without a dashboard login — the
-# token-gated public pages (candidate test, onboarding docs) depend on them. The
-# unguessable id/token in the URL is the credential. Everything else on
-# /api/{resource} (all lists, all candidate/employee/interview reads+writes)
-# requires a valid session. `auth-users` is blocked here entirely (managed only
-# via /api/auth/*). The interviewer sheet uses dedicated /api/public/* routes.
-# Reads by unguessable token id (candidate test + onboarding-doc pages).
-_PUBLIC_GET_BY_ID = {"test-invites", "doc-requests"}
+# The ONLY generic operations reachable without a dashboard login — the public
+# careers site + the token-gated public pages (candidate test, onboarding docs)
+# depend on them. The unguessable id/token in the URL is the credential.
+# Everything else on /api/{resource} (all candidate/employee/interview
+# reads+writes) requires a valid session. `auth-users` is blocked here entirely
+# (managed only via /api/auth/*). The interviewer sheet uses /api/public/* routes.
+#
+# Public LIST — the careers page lists job openings (frontend filters to open
+# ones). Read-only; job writes still require a session.
+_PUBLIC_LIST = {"jobs"}
+# Reads by id: public job detail (apply page) + unguessable-token reads
+# (candidate test + onboarding-doc pages).
+_PUBLIC_GET_BY_ID = {"jobs", "test-invites", "doc-requests"}
 # Writes: only the candidate's own onboarding bank details. Test-invite writes go
 # through the write-once /api/public/test/* endpoints instead of an arbitrary PATCH.
 _PUBLIC_PATCH_BY_ID = {"doc-requests"}
 
 
 def _is_public_generic(method: str, resource: str, has_item_id: bool) -> bool:
+    if method == "GET" and not has_item_id and resource in _PUBLIC_LIST:
+        return True
     if method == "GET" and has_item_id and resource in _PUBLIC_GET_BY_ID:
         return True
     if method == "PATCH" and has_item_id and resource in _PUBLIC_PATCH_BY_ID:
