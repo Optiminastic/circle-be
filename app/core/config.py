@@ -121,7 +121,10 @@ class Settings(BaseSettings):
     # for a stable dedicated key; otherwise it falls back to an existing secret
     # (rotating that secret just invalidates existing sessions, which is fine).
     session_secret: str = ""
-    session_ttl_hours: int = 12
+    # How long a login stays valid. Sliding: every app load (/api/auth/me) refreshes
+    # the cookie, so an active user stays signed in indefinitely and only has to log
+    # in again after this many hours of NO activity. Default 30 days.
+    session_ttl_hours: int = 720
 
     @field_validator("cors_origins", mode="before")
     @classmethod

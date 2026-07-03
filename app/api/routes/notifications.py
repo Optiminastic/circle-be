@@ -112,6 +112,10 @@ class CustomEmailIn(BaseModel):
     eventUid: str | None = None
     # Rendered as labelled buttons (e.g. resume / interview-questions links).
     links: list[EmailLinkIn] | None = None
+    # Optional file attachment (e.g. the offer-letter PDF).
+    attachmentName: str | None = None
+    attachmentBase64: str | None = None
+    attachmentType: str | None = None
 
 
 @router.post("/custom-email")
@@ -146,5 +150,14 @@ def custom_email(
         attendees=payload.attendees,
         event_uid=payload.eventUid,
         links=[l.model_dump() for l in payload.links] if payload.links else None,
+        attachment=(
+            {
+                "filename": payload.attachmentName,
+                "contentBase64": payload.attachmentBase64,
+                "contentType": payload.attachmentType,
+            }
+            if payload.attachmentBase64
+            else None
+        ),
     )
     return {"sent": sent} if sent else {"sent": False, "reason": "send_failed"}

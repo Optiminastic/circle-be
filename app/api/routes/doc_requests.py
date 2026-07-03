@@ -93,6 +93,19 @@ async def upload_request_document(
     if len(data) > limit:
         raise ValidationError(f"File exceeds the {settings.max_upload_mb} MB limit.")
 
+    # The signed offer letter is stricter: PDF/Word only, under 5 MB.
+    if docType == "Signed Offer Letter":
+        name = (file.filename or "").lower()
+        allowed_types = {
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }
+        if (file.content_type or "") not in allowed_types and not name.endswith((".pdf", ".doc", ".docx")):
+            raise ValidationError("Please upload a PDF or Word document (.pdf, .doc, .docx).")
+        if len(data) > 5 * 1024 * 1024:
+            raise ValidationError("File must be under 5 MB.")
+
     candidate_id = request.get("candidateId") or token
     doc_id = uuid.uuid4().hex[:12]
     filename = file.filename or "file"

@@ -880,11 +880,14 @@ def send_custom_email(
     attendees: list[str] | None = None,
     event_uid: str | None = None,
     links: list[dict[str, str]] | None = None,
+    attachment: dict[str, Any] | None = None,
 ) -> bool:
     """Send an HR-composed (and possibly edited) email, wrapped in the branded
     shell. When event details are supplied, a Google Calendar invite (.ics,
     METHOD:REQUEST) is attached so the event lands on every attendee's calendar.
     `links` are rendered as labelled buttons (HTML) / "Label: url" (plain text).
+    `attachment` (optional) is a file to attach, e.g. the offer-letter PDF:
+    {"filename": str, "contentBase64": str, "contentType": str}.
     Logs failures, never raises (runs inside a BackgroundTask)."""
     try:
         inner = _render_body_html(body)
@@ -930,6 +933,20 @@ def send_custom_email(
                 subtype="calendar",
                 filename="invite.ics",
                 params={"method": "REQUEST", "name": "invite.ics"},
+            )
+
+        # Optional file attachment (e.g. the offer-letter PDF).
+        if attachment and attachment.get("contentBase64"):
+            import base64 as _b64
+
+            raw = _b64.b64decode(attachment["contentBase64"])
+            ctype = attachment.get("contentType") or "application/pdf"
+            maintype, _, subtype = ctype.partition("/")
+            msg.add_attachment(
+                raw,
+                maintype=maintype or "application",
+                subtype=subtype or "pdf",
+                filename=attachment.get("filename") or "offer-letter.pdf",
             )
 
         _deliver(settings, msg)

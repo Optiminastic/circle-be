@@ -103,8 +103,21 @@ def logout(response: Response) -> dict[str, bool]:
 
 
 @router.get("/me")
-def me(user: dict[str, Any] = Depends(require_user)) -> dict[str, Any]:
-    # `user` is the validated session payload (email/role/name).
+def me(
+    request: Request,
+    response: Response,
+    settings: Settings = Depends(get_settings),
+    user: dict[str, Any] = Depends(require_user),
+) -> dict[str, Any]:
+    # `user` is the validated session payload (email/role/name). Sliding session:
+    # refresh the cookie on each app load so an active user is never logged out
+    # (the expiry window advances by session_ttl_hours from now).
+    _set_session_cookie(
+        request,
+        response,
+        settings,
+        {"email": user["email"], "role": user["role"], "name": user.get("name", "")},
+    )
     return {"email": user["email"], "role": user["role"], "name": user.get("name", "")}
 
 
