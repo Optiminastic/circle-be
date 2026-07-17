@@ -64,6 +64,22 @@ def status(
     }
 
 
+@router.delete("/connection")
+def disconnect(repo: DocumentRepository = Depends(get_repository)) -> dict[str, Any]:
+    """Forget the connected Google account by deleting its stored refresh token.
+
+    After this, scheduling still works but no events/Meet links are pushed until
+    someone connects again. Connecting is an upsert on the single "shared" row, so
+    the most recent account always wins — reconnect as HR to switch the account.
+    """
+    conn = _connection(repo)
+    if not conn:
+        return {"disconnected": False, "reason": "not_connected"}
+    repo.delete(_OAUTH_TABLE, _OAUTH_ROW_ID)
+    logger.info("Google Calendar disconnected (was %s)", conn.get("connectedEmail"))
+    return {"disconnected": True}
+
+
 @router.get("/oauth/url")
 def oauth_url(
     service: GoogleCalendarService = Depends(get_google_calendar_service),
