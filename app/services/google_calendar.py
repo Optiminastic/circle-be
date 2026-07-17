@@ -58,11 +58,26 @@ class GoogleCalendarService:
             }
         }
 
+    def _flow(self) -> Flow:
+        """Build a Flow for this client.
+
+        PKCE is deliberately OFF (`autogenerate_code_verifier=False`). The consent
+        URL and the token exchange happen in two separate HTTP requests, i.e. two
+        different Flow objects — so a code_verifier auto-generated while building
+        the consent URL is gone by the time we exchange the code, and Google then
+        rejects the exchange with "invalid_grant: Missing code verifier". This is a
+        confidential web client authenticated by its client_secret, for which PKCE
+        is optional (it protects public clients that cannot hold a secret).
+        """
+        flow = Flow.from_client_config(
+            self._client_config(), scopes=SCOPES, autogenerate_code_verifier=False
+        )
+        flow.redirect_uri = self._redirect_uri
+        return flow
+
     def build_auth_url(self, state: str) -> str:
         """Return the Google consent URL for connecting the shared account."""
-        flow = Flow.from_client_config(self._client_config(), scopes=SCOPES)
-        flow.redirect_uri = self._redirect_uri
-        url, _ = flow.authorization_url(
+        url, _ = self._flow().authorization_url(
             access_type="offline",
             include_granted_scopes="true",
             prompt="consent",  # force a refresh_token even on re-consent
@@ -72,8 +87,7 @@ class GoogleCalendarService:
 
     def exchange_code(self, code: str) -> dict[str, Any]:
         """Exchange the OAuth code for a long-lived refresh token."""
-        flow = Flow.from_client_config(self._client_config(), scopes=SCOPES)
-        flow.redirect_uri = self._redirect_uri
+        flow = self._flow()
         flow.fetch_token(code=code)
         creds = flow.credentials
         return {"refresh_token": creds.refresh_token, "email": self._primary_email(creds)}

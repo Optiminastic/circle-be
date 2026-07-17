@@ -83,27 +83,46 @@ def oauth_callback(
     settings: Settings = Depends(get_settings),
 ) -> RedirectResponse:
     target = f"{settings.frontend_url.rstrip('/')}/settings"
+
+    def fail(reason: str) -> RedirectResponse:
+        """Every failure carries a coarse reason code so the cause is visible in
+        the redirect + logs (never a token/stack trace — see CLAUDE.md 5.5)."""
+        return RedirectResponse(url=f"{target}?calendar=error&reason={reason}")
+
+    # Google itself refused / the user declined consent.
     if error or not code:
-        return RedirectResponse(url=f"{target}?calendar=error")
+        logger.warning(
+            "Google OAuth aborted before exchange: error=%s code_present=%s", error, bool(code)
+        )
+        return fail(error or "no_code")
+
     try:
         result = service.exchange_code(code)
-        if not result.get("refresh_token"):
-            # Google only returns a refresh token on first consent; prompt=consent
-            # in build_auth_url forces it, but guard anyway.
-            return RedirectResponse(url=f"{target}?calendar=error")
-        repo.upsert(
-            _OAUTH_TABLE,
-            _OAUTH_ROW_ID,
-            {
-                "id": _OAUTH_ROW_ID,
-                "refreshToken": result["refresh_token"],
-                "connectedEmail": result.get("email"),
-            },
-        )
-        return RedirectResponse(url=f"{target}?calendar=connected")
     except Exception:  # noqa: BLE001
-        logger.exception("Google OAuth callback failed")
-        return RedirectResponse(url=f"{target}?calendar=error")
+        logger.exception("Google OAuth token exchange failed")
+        return fail("exchange_failed")
+
+    if not result.get("refresh_token"):
+        # Google only returns a refresh token on first consent; prompt=consent in
+        # build_auth_url forces it, but guard anyway (previously silent).
+        logger.warning(
+            "Google OAuth returned no refresh token (email=%s) — revoke the app's "
+            "access at myaccount.google.com/permissions and reconnect.",
+            result.get("email"),
+        )
+        return fail("no_refresh_token")
+
+    repo.upsert(
+        _OAUTH_TABLE,
+        _OAUTH_ROW_ID,
+        {
+            "id": _OAUTH_ROW_ID,
+            "refreshToken": result["refresh_token"],
+            "connectedEmail": result.get("email"),
+        },
+    )
+    logger.info("Google Calendar connected for %s", result.get("email"))
+    return RedirectResponse(url=f"{target}?calendar=connected")
 
 
 class PushEventIn(BaseModel):
