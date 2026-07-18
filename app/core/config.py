@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     # outbound SMTP). Auto-derived from the Resend SMTP password if not set.
     resend_api_key: str = ""
 
+    # OnGrid background-verification API (Basic auth). Onboards a hired candidate
+    # into a community; verifications themselves are triggered by HR in OnGrid's
+    # portal. base_url points at the /app basePath. See app/services/ongrid.py.
+    ongrid_base_url: str = "https://api-staging.ongrid.in/app"
+    ongrid_username: str = ""
+    ongrid_password: str = ""
+    ongrid_community_id: str = ""
+
     # Anti-spam rate limiting for the PUBLIC, unauthenticated writes (job
     # application: candidate create + resume upload). Limits are per client IP.
     # The HR app origin and local/LAN origins are exempt (see rate_limit.py), so
@@ -83,6 +91,13 @@ class Settings(BaseSettings):
     # succession (one POST per file), so it needs more headroom than apply.
     upload_rate_limit_per_minute: int = 40
     upload_rate_limit_per_hour: int = 200
+    # Per-IP caps for public token-gated READS that reveal PII (doc-request
+    # details incl. bank account, and document bytes/URLs). Bounds scraping of a
+    # leaked link, but deliberately generous: HR reviews these same public
+    # endpoints interactively (opening each candidate's documents), so the cap
+    # must leave ample headroom for a busy reviewer on one IP.
+    portal_read_rate_limit_per_minute: int = 60
+    portal_read_rate_limit_per_hour: int = 600
     # Per-IP caps for the OTP / email-check endpoints (looser than apply, since a
     # single applicant makes a few calls: check + request + verify [+ resend]).
     otp_rate_limit_per_minute: int = 10
@@ -191,6 +206,12 @@ class Settings(BaseSettings):
     @property
     def has_candidate_feed(self) -> bool:
         return bool(self.candidate_feed_token.strip())
+
+    @property
+    def has_ongrid(self) -> bool:
+        return bool(
+            self.ongrid_username and self.ongrid_password and self.ongrid_community_id
+        )
 
 
 @lru_cache

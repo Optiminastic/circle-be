@@ -33,6 +33,10 @@ _DEFS: tuple[ResourceDef, ...] = (
     ResourceDef("employees", "employees", "id"),
     ResourceDef("assets", "assets", "id"),
     ResourceDef("email-templates", "email_templates", "id"),
+    # HR-edited overrides for the built-in transactional emails, keyed by template
+    # id (e.g. "iq_test_invite"). Only templates HR has actually edited get a row;
+    # everything else falls back to the built-in copy. See services/email_templates.
+    ResourceDef("email-template-overrides", "email_template_overrides", "id"),
     ResourceDef("sent-emails", "sent_emails", "id"),
     ResourceDef("offboarding", "offboarding", "employeeId"),
     ResourceDef("exit-handovers", "exit_handovers", "employeeId"),

@@ -35,6 +35,7 @@ from app.core.errors import RateLimitedError, ValidationError
 from app.core.logging import get_logger
 from app.repositories.base import DocumentRepository
 from app.services.email_sender import send_application_received, send_otp_email
+from app.services.email_templates import resolve as resolve_template
 from app.services.screening import build_answers, compute_fit
 from app.storage.base import FileStorage
 
@@ -266,6 +267,9 @@ class ApplicationIn(BaseModel):
     coverNote: str = Field(min_length=1, max_length=5000)
     # Optional fields.
     location: str = Field(default="", max_length=120)
+    # Male/Female/Other — captured for OnGrid BGV onboarding. Optional so older
+    # clients don't break; validated to the known set when present.
+    gender: str = Field(default="", max_length=10)
     currentCompany: str = Field(default="", max_length=120)
     resumeUrl: str = Field(default="", max_length=500)
     responses: dict[str, str] = Field(default_factory=dict)
@@ -393,6 +397,7 @@ async def apply(
         "email": app_in.email,
         "phone": f"+91 {app_in.phone}",
         "location": _clean(app_in.location),
+        "gender": app_in.gender if app_in.gender in ("Male", "Female", "Other") else "",
         "currentCompany": _clean(app_in.currentCompany),
         "currentDesignation": _clean(app_in.currentDesignation),
         "totalExperienceYears": app_in.totalExperienceYears,
@@ -420,12 +425,24 @@ async def apply(
     # 7) Consume the one-time email verification so it can't be reused, and email
     #    the applicant an automatic acknowledgement (best-effort, in background).
     repo.delete(_OTP_TABLE, _norm_email(app_in.email))
+    # Resolve any HR-saved template now, while the request's session is still
+    # open — the send itself runs after the response, when `repo` is closed.
+    received_override = resolve_template(
+        repo,
+        "application_received",
+        {
+            "candidate_name": candidate["fullName"],
+            "role": job.get("title", ""),
+            "position": job.get("title", ""),
+        },
+    )
     background_tasks.add_task(
         send_application_received,
         settings,
         app_in.email,
         candidate["fullName"],
         job.get("title", ""),
+        received_override,
     )
 
     # Return only an acknowledgement — never echo stored data back to the public.

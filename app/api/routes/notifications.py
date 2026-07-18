@@ -13,9 +13,11 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from app.api.dependencies import require_user
+from app.api.dependencies import get_repository, require_user
 from app.core.config import Settings, get_settings
+from app.repositories.base import DocumentRepository
 from app.services.email_sender import send_custom_email, send_schedule_email, send_test_email
+from app.services.email_templates import resolve as resolve_template
 
 # Sending mail is an HR action — require a session so this can't be used as an
 # open relay to send arbitrary email from the org's address.
@@ -70,11 +72,38 @@ class TestEmailIn(BaseModel):
 def test_email(
     payload: TestEmailIn,
     settings: Settings = Depends(get_settings),
+    repo: DocumentRepository = Depends(get_repository),
 ) -> dict[str, Any]:
     if not payload.to.strip():
         return {"sent": False, "reason": "no_recipient"}
     if not settings.has_smtp:
         return {"sent": False, "reason": "not_configured"}
+
+    # If HR has saved an override for this template, send that instead. The body
+    # is plain text, so it goes out through the same branded renderer as an
+    # HR-composed email (including [[label|url]] link buttons).
+    override = resolve_template(
+        repo,
+        payload.template,
+        {
+            "candidate_name": payload.candidateName,
+            "role": payload.position or "",
+            "position": payload.position or "",
+            "test_url": payload.testUrl or "",
+            "link": payload.testUrl or "",
+            "score": payload.score or "",
+            "duration_min": payload.durationMin or "",
+            "salary": payload.salary or "",
+        },
+    )
+    if override:
+        sent = send_custom_email(
+            settings=settings,
+            to=payload.to.strip(),
+            subject=override["subject"],
+            body=override["body"],
+        )
+        return {"sent": sent} if sent else {"sent": False, "reason": "send_failed"}
 
     sent = send_test_email(
         settings=settings,

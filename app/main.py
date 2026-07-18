@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import (
     auth,
+    bgv_ongrid,
     calendar,
     candidate_delete,
     candidate_handoff,
@@ -95,6 +96,17 @@ def create_app() -> FastAPI:
             (settings.upload_rate_limit_per_hour, 3600.0),
         ]
     )
+    # Public token-gated READS that reveal PII (doc-request details incl. bank
+    # account, and document bytes/URLs) + the candidate's own doc-request PATCH.
+    # Bounds scraping if a link leaks, but generous enough that HR reviewing a
+    # candidate's documents (the panel polls every 20s + opens each file) is never
+    # throttled. Its own counter, so it doesn't compete with the upload budget.
+    public_read_limiter = SlidingWindowRateLimiter(
+        [
+            (settings.portal_read_rate_limit_per_minute, 60.0),
+            (settings.portal_read_rate_limit_per_hour, 3600.0),
+        ]
+    )
     public_write_paths = {"/api/public/apply", "/api/candidates", "/api/documents", "/api/auth/login"}
 
     def _is_public_upload(path: str) -> bool:
@@ -111,6 +123,21 @@ def create_app() -> FastAPI:
         """Public, token-gated candidate feed (GET) — exposes PII, so it's per-IP
         rate limited so a leaked URL can't be scraped at speed."""
         return path.startswith("/api/candidate-feed/")
+
+    def _is_public_portal_read(method: str, path: str) -> bool:
+        """Public, token-gated endpoints that REVEAL PII or accept the candidate's
+        own doc-request writes. Same reasoning as the candidate feed: a leaked
+        link must not be scrapable at speed. Covers:
+          - GET/PATCH /api/doc-requests/{token}  (details incl. bank acct; consent/
+            bank/references saves).  NOT the /upload sub-path (POST, handled above).
+          - GET /api/documents/{id}/preview | /url  (document bytes / presigned URL).
+        """
+        if method == "GET" or method == "PATCH":
+            if path.startswith("/api/doc-requests/") and not path.endswith("/upload"):
+                return True
+        if method == "GET" and path.startswith("/api/documents/"):
+            return path.endswith("/preview") or path.endswith("/url")
+        return False
     # NOTE: the OTP / email-check endpoints are intentionally NOT per-IP rate
     # limited. Many candidates can legitimately request a code at the same time —
     # from a shared office/college network, or all via the careers server's single
@@ -150,6 +177,12 @@ def create_app() -> FastAPI:
             ip = client_ip(request)
             if not public_write_limiter.allow(ip):
                 return _too_many(ip, path)
+        # Public token-gated reads/patches that reveal PII (doc-request details,
+        # document bytes) — looser cap, so a leaked link can't be scraped fast.
+        elif settings.rate_limit_enabled and _is_public_portal_read(request.method, path):
+            ip = client_ip(request)
+            if not public_read_limiter.allow(ip):
+                return _too_many(ip, path)
         return await call_next(request)
 
     # Compress large list payloads — JSONB resource lists shrink ~5-10x.
@@ -178,6 +211,7 @@ def create_app() -> FastAPI:
     # so their literal paths win over "/api/{resource}".
     app.include_router(documents.router)
     app.include_router(doc_requests.router)
+    app.include_router(bgv_ongrid.router)
     app.include_router(notifications.router)
     app.include_router(calendar.router)
     # Auth (login/logout/me + admin account mgmt) — its own /api/auth/* prefix.

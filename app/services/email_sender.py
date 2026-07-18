@@ -1030,9 +1030,24 @@ def send_otp_email(settings: Settings, to: str, code: str) -> bool:
         return False
 
 
-def send_application_received(settings: Settings, to: str, name: str, role: str) -> bool:
+def send_application_received(
+    settings: Settings,
+    to: str,
+    name: str,
+    role: str,
+    override: dict[str, str] | None = None,
+) -> bool:
     """Confirm to a candidate that their application was received. Logs failures,
-    never raises (runs inside a BackgroundTask)."""
+    never raises (runs inside a BackgroundTask).
+
+    `override` is an already-rendered {subject, body} from an HR-saved template —
+    resolved by the caller, because this runs after the request's DB session has
+    closed. When absent the built-in copy below is used unchanged.
+    """
+    if override:
+        return send_custom_email(
+            settings=settings, to=to, subject=override["subject"], body=override["body"]
+        )
     try:
         safe_name = html.escape(name.strip() or "there")
         safe_role = html.escape(role.strip() or "the role")
