@@ -15,9 +15,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response
 
-from app.api.dependencies import get_repository, get_storage, require_user
+from app.api.dependencies import (
+    get_google_calendar_service,
+    get_repository,
+    get_storage,
+    require_user,
+)
+from app.api.routes.calendar import cleanup_calendar_events
+from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.repositories.base import DocumentRepository
+from app.services.google_calendar import GoogleCalendarService
 from app.storage.base import FileStorage
 
 # Deleting a candidate is destructive + cascades — require a dashboard session.
@@ -44,14 +52,33 @@ def delete_candidate(
     candidate_id: str,
     repo: DocumentRepository = Depends(get_repository),
     storage: FileStorage = Depends(get_storage),
+    calendar: GoogleCalendarService = Depends(get_google_calendar_service),
+    settings: Settings = Depends(get_settings),
 ) -> Response:
     removed = 0
+    # Google Calendar app-event ids to remove (interview = the event itself + the
+    # interviewer's +1h event; schedules = the round's event). Collected here as
+    # rows are found, then cleaned up so nothing lingers on the HR / interviewer /
+    # candidate calendars.
+    calendar_event_ids: list[str] = []
     # Pipeline records that reference the candidate by a candidateId field.
     for table in _CHILD_BY_FIELD:
         for rec in repo.find(table, {"candidateId": candidate_id}):
             rid = rec.get("id")
-            if rid and repo.delete(table, rid):
+            if not rid:
+                continue
+            if table == "interviews":
+                calendar_event_ids.append(rid)
+                calendar_event_ids.append(f"{rid}-interviewer")
+            elif table == "schedules":
+                calendar_event_ids.append(rid)
+            if repo.delete(table, rid):
                 removed += 1
+    # Remove the linked Google Calendar events (best-effort — never blocks delete).
+    try:
+        cleanup_calendar_events(repo, calendar, settings, calendar_event_ids)
+    except Exception:  # noqa: BLE001
+        logger.warning("Calendar cleanup failed during delete of candidate %s", candidate_id)
     # Records keyed directly by candidateId (no-op when absent).
     for table in _CHILD_BY_KEY:
         if repo.delete(table, candidate_id):

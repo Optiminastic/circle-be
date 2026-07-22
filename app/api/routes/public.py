@@ -19,6 +19,7 @@ Reads stay on the generic GET /api/jobs (served server-side by the careers app).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import secrets
@@ -27,6 +28,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, ValidationError as PydanticValidationError, field_validator
 
 from app.api.dependencies import get_repository, get_storage
@@ -82,6 +84,24 @@ def _norm_email(email: str) -> str:
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+async def _send_application_received_after_delay(
+    settings: Settings,
+    to: str,
+    name: str,
+    role: str,
+    override: dict[str, str] | None,
+    delay_minutes: int,
+) -> None:
+    """Wait, then send the acknowledgement. `asyncio.sleep` only pins a timer on
+    the event loop (no thread held); the actual send is dispatched to a worker
+    thread since `send_application_received` is a blocking SMTP/HTTP call.
+    In-process only — a restart inside the delay window drops the pending send,
+    same trade-off as every other best-effort BackgroundTask in this file."""
+    if delay_minutes > 0:
+        await asyncio.sleep(delay_minutes * 60)
+    await run_in_threadpool(send_application_received, settings, to, name, role, override)
 
 
 def _parse_iso(value: Any) -> datetime | None:
@@ -437,12 +457,13 @@ async def apply(
         },
     )
     background_tasks.add_task(
-        send_application_received,
+        _send_application_received_after_delay,
         settings,
         app_in.email,
         candidate["fullName"],
         job.get("title", ""),
         received_override,
+        settings.application_received_delay_minutes,
     )
 
     # Return only an acknowledgement — never echo stored data back to the public.

@@ -13,7 +13,7 @@ BackgroundTask) because it needs the request-scoped DB session.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -48,6 +48,39 @@ _OAUTH_STATE = "curcle-shared"
 
 def _connection(repo: DocumentRepository) -> dict[str, Any] | None:
     return repo.get(_OAUTH_TABLE, _OAUTH_ROW_ID)
+
+
+def cleanup_calendar_events(
+    repo: DocumentRepository,
+    service: GoogleCalendarService,
+    settings: Settings,
+    app_event_ids: Iterable[str],
+) -> int:
+    """Delete the Google Calendar events mapped to these app-event ids and drop
+    their `calendar_links` rows. Google's ``sendUpdates="all"`` removes the event
+    from every attendee's calendar (HR, interviewer, candidate). Best-effort — a
+    missing link or a Google failure is skipped, never raised, so it can be called
+    from a cascade delete without blocking it. Returns the number of links removed.
+    """
+    conn = _connection(repo)
+    refresh_token = (conn or {}).get("refreshToken")
+    removed = 0
+    for app_event_id in app_event_ids:
+        link = repo.get(_LINKS_TABLE, app_event_id)
+        if not link or not link.get("googleEventId"):
+            continue
+        if refresh_token:
+            try:
+                service.delete_event(
+                    refresh_token,
+                    link.get("calendarId", settings.google_calendar_id),
+                    link["googleEventId"],
+                )
+            except Exception:  # noqa: BLE001 - never block the caller on a Google error
+                logger.warning("Could not delete calendar event for %s", app_event_id)
+        repo.delete(_LINKS_TABLE, app_event_id)
+        removed += 1
+    return removed
 
 
 @router.get("/status")

@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     # Resend HTTP API key (used INSTEAD of SMTP when set — Render free tier blocks
     # outbound SMTP). Auto-derived from the Resend SMTP password if not set.
     resend_api_key: str = ""
+    # Delay before the "application received" acknowledgement goes out, so it
+    # doesn't arrive the instant the candidate submits. In-process timer (see
+    # public.py) — not durable across a restart within the delay window.
+    application_received_delay_minutes: int = 30
 
     # OnGrid background-verification API (Basic auth). Onboards a hired candidate
     # into a community; verifications themselves are triggered by HR in OnGrid's
