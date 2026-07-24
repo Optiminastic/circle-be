@@ -31,11 +31,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, ValidationError as PydanticValidationError, field_validator
 
-from app.api.dependencies import get_repository, get_storage
+from app.api.dependencies import get_database, get_repository, get_storage
 from app.core.config import Settings, get_settings
 from app.core.errors import RateLimitedError, ValidationError
 from app.core.logging import get_logger
+from app.db.database import Database
 from app.repositories.base import DocumentRepository
+from app.repositories.document_repository import SqlAlchemyDocumentRepository
 from app.services.email_sender import send_application_received, send_otp_email
 from app.services.email_templates import resolve as resolve_template
 from app.services.screening import build_answers, compute_fit
@@ -86,8 +88,22 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _log_sent_email(database: Database, row: dict[str, Any]) -> None:
+    """Record a row in the same `sent_emails` resource the HR dashboard's Email
+    Log reads from. Best-effort — a logging failure must never affect the send
+    itself, and this runs on its own session since the request's is long closed."""
+    session = database.session()
+    try:
+        SqlAlchemyDocumentRepository(session).upsert("sent_emails", row["id"], row)
+    except Exception:  # noqa: BLE001 - logging only, never propagate
+        logger.exception("Could not log sent-email row id=%s", row.get("id"))
+    finally:
+        session.close()
+
+
 async def _send_application_received_after_delay(
     settings: Settings,
+    database: Database,
     to: str,
     name: str,
     role: str,
@@ -101,7 +117,24 @@ async def _send_application_received_after_delay(
     same trade-off as every other best-effort BackgroundTask in this file."""
     if delay_minutes > 0:
         await asyncio.sleep(delay_minutes * 60)
-    await run_in_threadpool(send_application_received, settings, to, name, role, override)
+    sent = await run_in_threadpool(send_application_received, settings, to, name, role, override)
+    if not sent:
+        return
+    subject = override["subject"] if override else f"We received your application — {role.strip() or 'your role'}"
+    await run_in_threadpool(
+        _log_sent_email,
+        database,
+        {
+            "id": f"EML-{uuid.uuid4().hex[:10]}",
+            "recipientName": name,
+            "recipientEmail": to,
+            "templateTitle": "Application received",
+            "subject": subject,
+            "dateSent": datetime.now(timezone.utc).isoformat(),
+            "status": "Sent",
+            "relatedEntity": name,
+        },
+    )
 
 
 def _parse_iso(value: Any) -> datetime | None:
@@ -341,6 +374,7 @@ async def apply(
     repo: DocumentRepository = Depends(get_repository),
     storage: FileStorage = Depends(get_storage),
     settings: Settings = Depends(get_settings),
+    database: Database = Depends(get_database),
 ) -> dict[str, Any]:
     # 1) Parse + validate the application (strict schema, length/format caps).
     try:
@@ -459,6 +493,7 @@ async def apply(
     background_tasks.add_task(
         _send_application_received_after_delay,
         settings,
+        database,
         app_in.email,
         candidate["fullName"],
         job.get("title", ""),
